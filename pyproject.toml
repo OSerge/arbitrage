@@ -1,0 +1,23 @@
+[project]
+name = "arbitrage"
+authors = [{name = "Serge Podkolzin", email = "serzhpodkolzin@ya.ru"}]
+version = "0.1.0"
+description = "Statistical arbitrage on the MOEX"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.2.6",
+    "pandas>=2.2.3",
+    "requests>=2.32.3",
+    "statsmodels>=0.14.4",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6.29.5",
+    "matplotlib>=3.10.3",
+    "seaborn>=0.13.2",
+]
+lint = [
+    "ruff>=0.11.11",
+]
