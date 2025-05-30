@@ -16,6 +16,7 @@ dependencies = [
 dev = [
     "ipykernel>=6.29.5",
     "matplotlib>=3.10.3",
+    "pytest>=8.3.5",
     "seaborn>=0.13.2",
 ]
 lint = [

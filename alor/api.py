@@ -1,14 +1,11 @@
 from datetime import datetime
 import requests
 import logging
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Union
 import pandas as pd
 
 class AlorAPI:
     """Класс для работы с API Alor"""
-    
-    # FROM_TIME = int(datetime(2025, 1, 1, 0, 0).timestamp())
-    # TO_TIME = int(datetime(2025, 12, 31, 0, 0).timestamp())
     
     def __init__(
         self, 
@@ -23,8 +20,8 @@ class AlorAPI:
         if token:
             self.headers['Authorization'] = f'Bearer {token}'
         
-        self.from_time = from_time if from_time else self.FROM_TIME
-        self.to_time = to_time if to_time else self.TO_TIME
+        self.from_time = from_time
+        self.to_time = to_time
         
         self.logger = logging.getLogger(__name__)
     
@@ -115,10 +112,12 @@ class AlorAPI:
         instrument_group: str = 'RFUD',
         limit: int = 50,
         offset: int = 0,
-    ) -> List[str, Any]:
+    ) -> List[str]:
         """
-        Получение списка ценных бумаг
-        
+        Получение списка ценных бумаг. 
+        Пока рассчитан на получение списка фьючерсов.
+        TODO: Добавить возможность получения списка акций.
+
         :param sector: Сектор (по умолчанию 'FORTS')
         :param exchange: Биржа (по умолчанию 'MOEX')
         :param instrument_group: Группа инструментов (по умолчанию 'RFUD')
@@ -150,6 +149,10 @@ class AlorAPI:
 
 if __name__ == '__main__':
     api = AlorAPI()
-    response = api.get_security_historical_data('brj5')
+    response = api.get_security_historical_data(
+        symbol='brj5',
+        from_time='2025-01-01',
+        to_time='2025-05-30',    
+    )
     print(type(response))
     print(pd.json_normalize(response))

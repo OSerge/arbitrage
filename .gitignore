@@ -12,3 +12,10 @@ wheels/
 
 # VSCode
 .vscode
+
+# uv
+.python-version
+.ruff_cache
+
+# pytest
+.pytest_cache
