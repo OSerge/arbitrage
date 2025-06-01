@@ -36,7 +36,7 @@ class AlorAPI:
         split_adjust: bool = True,
         format: str = 'simple',
         json_response: bool = True
-    ) -> Dict[str, Any]:
+    ) -> pd.DataFrame:
         """
         Получение исторических данных по ценной бумаге
 
@@ -99,7 +99,7 @@ class AlorAPI:
         try:
             response = requests.get(url, headers=self.headers, params=params)
             response.raise_for_status()
-            return response.json()['history']
+            return pd.json_normalize(response.json()['history'])
         
         except requests.exceptions.RequestException as e:
             self.logger.error(f"Ошибка при получении исторических данных: {e}")

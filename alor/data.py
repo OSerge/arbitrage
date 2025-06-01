@@ -23,8 +23,15 @@ class DataManager:
         """Сохранение данных по активу"""
         if not os.path.exists('data'):
             os.makedirs('data')
-            
+
         data.to_csv(f'data/{symbol}.csv', index=False)
+
+    def load_data_from_csv(self, symbol: str) -> pd.DataFrame:
+        """Загрузка данных по активу"""
+        if not os.path.exists(f'data/{symbol}.csv'):
+            raise FileNotFoundError(f'Файл с данными по символу {symbol} не найден')
+        
+        return pd.read_csv(f'data/{symbol}.csv')
     
     def clear_cache(self):
         """Очистка кэша данных"""
