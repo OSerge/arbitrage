@@ -145,14 +145,3 @@ class AlorAPI:
         except requests.exceptions.RequestException as e:
             self.logger.error(f"Ошибка при получении списка ценных бумаг: {e}")
             raise
-
-
-if __name__ == '__main__':
-    api = AlorAPI()
-    response = api.get_security_historical_data(
-        symbol='brj5',
-        from_time='2025-01-01',
-        to_time='2025-05-30',    
-    )
-    print(type(response))
-    print(pd.json_normalize(response))
