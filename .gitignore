@@ -13,6 +13,9 @@ wheels/
 # VSCode
 .vscode
 
+# PyCharm
+.idea
+
 # uv
 .python-version
 .ruff_cache

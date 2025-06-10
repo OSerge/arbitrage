@@ -1,11 +1,13 @@
 import os
 import pandas as pd
-from typing import Dict, List
+
+from typing import Dict
 import logging
 
-class DataManager:
+
+class DataCache:
     """
-    Класс для кэширования данных (in-memory). Не знает ничего про API и файлы.
+    Класс для кэширования данных (in-memory).
     """
     def __init__(self):
         self.data_cache: Dict[str, pd.DataFrame] = {}
@@ -33,16 +35,27 @@ class DataStorage:
     @staticmethod
     def save_data_to_csv(symbol: str, data: pd.DataFrame):
         """Сохранение данных по активу"""
-        if not os.path.exists('data'):
-            os.makedirs('data')
-        data.to_csv(f'data/{symbol}.csv', index=False)
+        if not os.path.exists('./data'):
+            os.makedirs('./data')
+        data.to_csv(f'./data/{symbol}.csv', index=False)
 
     @staticmethod
     def load_data_from_csv(symbol: str) -> pd.DataFrame:
         """Загрузка данных по активу"""
-        if not os.path.exists(f'data/{symbol}.csv'):
+        if not os.path.exists(f'./data/{symbol}.csv'):
             raise FileNotFoundError(f'Файл с данными по символу {symbol} не найден')
-        return pd.read_csv(f'data/{symbol}.csv')
+        return pd.read_csv(f'./data/{symbol}.csv')
 
-    
+
+class DataManager:
+    """
+    Класс для работы с данными.
+    """
+    def __init__(self):
+        self.cache = DataCache()
+        self.storage = DataStorage()
+
+    def get_data(self, symbol: str, from_time: int, to_time: int) -> pd.DataFrame:
+        raise NotImplementedError("get_data")
+
 

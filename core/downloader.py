@@ -1,13 +1,11 @@
 import os
-import sys
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from datetime import datetime, timedelta
 import logging
-from alor.api import AlorAPI
-from alor.data import DataManager
 
-# Настройка логирования
+from alor import AlorAPI
+from data import DataManager, DataStorage
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -35,9 +33,10 @@ def main():
     api = AlorAPI(token=os.getenv('ALOR_TOKEN', ''))
     
     # Создаем менеджер данных
-    data_manager = DataManager(api)
+    data_manager = DataManager()
+    data_storage = DataStorage()
     
-    # Устанавливаем временной диапазон (последние 30 дней)
+    # Устанавливаем временной диапазон (последние 90 дней)
     end_time = datetime.now()
     start_time = end_time - timedelta(days=90)
     
@@ -52,19 +51,24 @@ def main():
         try:
             logger.info(f"Загрузка данных для {symbol}")
             
-            # Получаем данные
-            data = data_manager.get_data(symbol, from_time, to_time)
+            # Получаем данные через API
+            data = api.get_security_historical_data(
+                symbol=symbol,
+                from_time=from_time,
+                to_time=to_time,
+                tf=3600,  # часовой таймфрейм
+                exchange='MOEX',
+                instrument_group='RFUD'
+            )
             
             # Сохраняем в CSV
-            data_manager.save_data_to_csv(symbol, data)
+            data_storage.save_data_to_csv(symbol, data)
             
             logger.info(f"Данные для {symbol} успешно сохранены")
             
         except Exception as e:
             logger.error(f"Ошибка при загрузке данных для {symbol}: {e}")
     
-    # Очищаем кэш
-    data_manager.clear_cache()
     logger.info("Загрузка данных завершена")
 
 if __name__ == '__main__':
