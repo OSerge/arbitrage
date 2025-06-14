@@ -7,11 +7,9 @@ from rich.panel import Panel
 import logging
 import os
 from itertools import combinations
-from typing import List
 
 from data import DataManager
 from analysis import DataAnalyzer
-from backtest import BackTest, ArbitrageBacktest
 
 
 # Настройка логирования
@@ -20,6 +18,11 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# --- Константы рынка Мосбиржи ---
+TRADING_HOURS_PER_DAY = 15  # Фьючерсы торгуются ~15 часов в день
+TRADING_DAYS_PER_YEAR = 252  # Среднее количество торговых дней
+HOURS_IN_YEAR = TRADING_HOURS_PER_DAY * TRADING_DAYS_PER_YEAR
 
 futures = [
     # "GKM5", # Обыкновенные акции ПАО «ГМК «Норильский никель»
@@ -51,7 +54,7 @@ class Backtester:
     """Класс для комплексного бэктестинга"""
     
     def __init__(self, series_1, series_2, lookback=60, entry_threshold=2.0,
-                 exit_threshold=0.5, transaction_cost=0.001):
+                 exit_threshold=0.5, broker_commission=1.0, exchange_commission=1.0):
         """
         Инициализация параметров бэктестера
         
@@ -60,14 +63,16 @@ class Backtester:
         :param lookback: Окно наблюдения для расчета параметров
         :param entry_threshold: Порог входа в сделку (в стандартных отклонениях)
         :param exit_threshold: Порог выхода из сделки
-        :param transaction_cost: Транзакционные издержки
+        :param broker_commission: Комиссия брокера за контракт в рублях
+        :param exchange_commission: Комиссия биржи за контракт в рублях
         """
         self.series_1 = np.array(series_1)
         self.series_2 = np.array(series_2)
         self.lookback = lookback
         self.entry_threshold = entry_threshold
         self.exit_threshold = exit_threshold
-        self.transaction_cost = transaction_cost
+        self.broker_commission = broker_commission
+        self.exchange_commission = exchange_commission
         
         # Результаты тестов
         self.signals = None
@@ -125,7 +130,11 @@ class Backtester:
 
             # Комиссии при смене позиции (две ножки)
             if i > 1 and self.signals[i-1] != self.signals[i-2]:
-                returns[i-1] -= 2 * self.transaction_cost
+                # Комиссия за два контракта (вход и выход)
+                total_commission = 2 * (self.broker_commission + self.exchange_commission)
+                # Добавляем НДС к комиссии брокера
+                total_commission += 2 * (self.broker_commission * 0.2)  # 20% НДС
+                returns[i-1] -= total_commission / notional
 
         self.returns = returns
         return self.returns
@@ -135,10 +144,8 @@ class Backtester:
         if self.returns is None:
             raise ValueError("Сначала рассчитайте доходность")
         
-        # Количество торговых часов в году (примерно)
-        HOURS_IN_YEAR = 252 * 7
-
         n_hours = len(self.returns)
+        logger.info(f"Количество часов: {n_hours}")
 
         if n_hours == 0:
             raise ValueError("Пустой массив доходностей")
@@ -147,9 +154,11 @@ class Backtester:
         equity_curve = np.cumprod(1 + self.returns)
         total_return = equity_curve[-1] - 1
 
+        # Годовой коэффициент с учётом 15 торговых часов в день
         annual_factor = HOURS_IN_YEAR / n_hours
         annual_return = (1 + total_return) ** annual_factor - 1
 
+        # Волатильность (часовая) годовая
         volatility = np.std(self.returns) * np.sqrt(HOURS_IN_YEAR)
         
         # Коэффициент Шарпа
@@ -162,7 +171,7 @@ class Backtester:
         # Дополнительная информация о временных интервалах
         time_info = {
             'total_hours': n_hours,
-            'trading_days': n_hours / 7,  # примерное количество торговых дней
+            'trading_days': n_hours / TRADING_HOURS_PER_DAY,
             'annual_factor': annual_factor,
             'hours_in_year': HOURS_IN_YEAR
         }
@@ -198,13 +207,11 @@ class Backtester:
     
     def run_full_backtest(self, analyzer: DataAnalyzer):
         """Запуск полного цикла бэктестинга"""
-        # Шаг 1: Проверка коинтеграции
         cointegration = analyzer.engle_granger_test(self.series_1, self.series_2)
         
         if not cointegration['is_cointegrated']:
             raise ValueError("Активы не коинтегрированы")
         
-        # Шаг 2: Генерация сигналов
         z_score = analyzer.calculate_zscore(
             self.series_1,
             self.series_2,
@@ -214,13 +221,10 @@ class Backtester:
         )
         self.generate_signals(z_score)
         
-        # Шаг 3: Расчет доходности
         self.calculate_returns(cointegration['beta'])
         
-        # Шаг 4: Расчет метрик
         self.performance = self.performance_metrics()
         
-        # Шаг 5: Анализ рисков
         self.risk_analysis = self.monte_carlo_analysis()
         
         return {
