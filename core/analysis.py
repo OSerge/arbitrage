@@ -8,7 +8,25 @@ logger = logging.getLogger(__name__)
 
 
 class DataAnalyzer:
-    """Класс для анализа коинтеграции"""
+    """Класс для анализа коинтеграции
+    
+    Формат данных в исходных .csv:
+    ```
+    time,close,open,high,low,volume
+    1742191200,139800.0,139800.0,139800.0,139800.0,10
+    1742194800,139587.0,139351.0,139715.0,139220.0,31
+    1742198400,139975.0,139827.0,140080.0,139500.0,16
+    ...
+    ```
+
+    Формат данных в .csv после join_pair:
+    ```
+    time,close_1,close_2
+    1742191200,139800.0,139800.0
+    1742194800,139587.0,139351.0
+    ...
+    ```
+    """
     
     def __init__(self, alpha: float = 0.05):
         """
@@ -32,21 +50,6 @@ class DataAnalyzer:
         result = adfuller(series)
         p_value = result[1]
         return p_value, p_value < self.alpha
-    
-    def calculate_spread(self, series1: pd.Series, series2: pd.Series) -> pd.Series:
-        """
-        Вычисляет спред между двумя рядами
-        
-        Args:
-            series1 (pd.Series): Первый временной ряд
-            series2 (pd.Series): Второй временной ряд
-            
-        Returns:
-            pd.Series: Нормализованный спред
-        """
-        norm1 = (series1 - series1.mean()) / series1.std()
-        norm2 = (series2 - series2.mean()) / series2.std()
-        return norm1 - norm2
     
     def engle_granger_test(self, series1: pd.Series, series2: pd.Series) -> Dict:
         """
