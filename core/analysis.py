@@ -1,10 +1,8 @@
 import logging
 from typing import Dict, List, Tuple
 import pandas as pd
+import numpy as np
 from statsmodels.tsa.stattools import coint, adfuller
-from statsmodels.regression.linear_model import OLS
-
-from data import DataStorage
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +48,53 @@ class DataAnalyzer:
         norm2 = (series2 - series2.mean()) / series2.std()
         return norm1 - norm2
     
+    def engle_granger_test(self, series1: pd.Series, series2: pd.Series) -> Dict:
+        """
+        Тест коинтеграции Энгла-Грейнджера
+        
+        Args:
+            series1 (pd.Series): Первый временной ряд
+            series2 (pd.Series): Второй временной ряд
+            
+        Returns:
+            Dict: Результаты теста коинтеграции
+        """
+        score, pvalue, _ = coint(series1, series2)
+        X = np.column_stack([np.ones(len(series1)), series2])
+        beta = np.linalg.lstsq(X, series1, rcond=None)[0]
+        
+        return {
+            'alpha': beta[0],
+            'beta': beta[1],
+            'adf_statistic': score,
+            'p_value': pvalue,
+            'is_cointegrated': pvalue < self.alpha
+        }
+    
+    def calculate_zscore(self, series1: pd.Series, series2: pd.Series, 
+                        beta: float, lookback: int, alpha: float = 0.0) -> pd.Series:
+        """
+        Расчет Z-score для пары инструментов
+        
+        Args:
+            series1 (pd.Series): Первый временной ряд
+            series2 (pd.Series): Второй временной ряд
+            beta (float): Коэффициент коинтеграции
+            lookback (int): Размер окна для расчета
+            alpha (float): Константа сдвига
+            
+        Returns:
+            pd.Series: Z-score
+        """
+        # Спред c учётом константы alpha (сдвига), получаемой из регрессии
+        spread = series1 - beta * series2 - alpha
+        spread_series = pd.Series(spread)
+        
+        spread_mean = spread_series.rolling(lookback).mean()
+        spread_std = spread_series.rolling(lookback).std()
+        
+        return (spread - spread_mean) / spread_std
+    
     def check_cointegration(self, series1: pd.Series, series2: pd.Series) -> Dict:
         """
         Проверяет коинтеграцию между двумя рядами
@@ -61,25 +106,7 @@ class DataAnalyzer:
         Returns:
             Dict: Результаты анализа коинтеграции
         """
-        # Тест Энгла-Грейнджера
-        score, p_value, _ = coint(series1, series2)
-        # Расчет коэффициентов регрессии
-        # model = OLS(series1, series2).fit()
-        # beta = model.params[0]
-        # Расчет спреда
-        spread = self.calculate_spread(series1, series2)
-        spread_p_value, is_spread_stationary = self.check_stationarity(spread)
-        
-        return {
-            'p_value': p_value,
-            'is_cointegrated': p_value < self.alpha,
-            'score': score,
-            # 'beta': beta,
-            # 'spread_p_value': spread_p_value,
-            # 'spread': spread,
-            'is_spread_stationary': is_spread_stationary,
-        }
-    
+        return self.engle_granger_test(series1, series2)
     
     def find_cointegrated_pairs(self, df: pd.DataFrame) -> List[Dict]:
         """

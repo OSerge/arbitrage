@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-from statsmodels.tsa.stattools import adfuller, coint
 from rich.console import Console, Group
 from rich.table import Table
 from rich.panel import Panel
@@ -24,8 +23,8 @@ logger = logging.getLogger(__name__)
 
 futures = [
     # "GKM5", # Обыкновенные акции ПАО «ГМК «Норильский никель»
-    "GZM5", # Газпром обыкновенные
-    # "CHM5", # обыкновенные акции ПАО «Северсталь»
+    # "GZM5", # Газпром обыкновенные
+    "CHM5", # обыкновенные акции ПАО «Северсталь»
     "TTM5", # Татнефть
     # "TNM5", # Транснефть
     # "RNM5", # Роснефть
@@ -49,7 +48,7 @@ def check_files(symbol_pairs: list[tuple]):
         
 
 class Backtester:
-    """Класс для комплексного бэктестинга парного статистического арбитража"""
+    """Класс для комплексного бэктестинга"""
     
     def __init__(self, series_1, series_2, lookback=60, entry_threshold=2.0,
                  exit_threshold=0.5, transaction_cost=0.001):
@@ -71,69 +70,28 @@ class Backtester:
         self.transaction_cost = transaction_cost
         
         # Результаты тестов
-        self.stationarity = None
-        self.cointegration = None
         self.signals = None
-        self.z_score = None
         self.returns = None
         self.performance = None
         self.risk_analysis = None
     
-    def adf_test(self, series):
-        """Расширенный тест Дики-Фуллера для проверки стационарности"""
-        result = adfuller(series)
-        return {
-            'adf_statistic': result[0],
-            'p_value': result[1],
-            'critical_values': result[4],
-            'is_stationary': result[1] < 0.05
-        }
-    
-    def engle_granger_test(self):
-        """Тест коинтеграции Энгла-Грейнджера с использованием statsmodels"""
-        # Выполняем тест коинтеграции
-        score, pvalue, _ = coint(self.series_1, self.series_2)
-        
-        # Оцениваем параметры коинтеграции (МНК)
-        X = np.column_stack([np.ones(len(self.series_1)), self.series_2])
-        beta = np.linalg.lstsq(X, self.series_1, rcond=None)[0]
-        
-        return {
-            'alpha': beta[0],
-            'beta': beta[1],
-            'adf_statistic': score,
-            'p_value': pvalue,
-            'is_cointegrated': pvalue < 0.05,
-        }
-    
-    def calculate_zscore(self):
-        """Расчет Z-score для генерации торговых сигналов"""
-        spread = self.series_1 - self.cointegration['beta'] * self.series_2
-        spread_series = pd.Series(spread)
-        
-        spread_mean = spread_series.rolling(self.lookback).mean()
-        spread_std = spread_series.rolling(self.lookback).std()
-        
-        self.z_score = (spread - spread_mean) / spread_std
-        return self.z_score
-    
-    def generate_signals(self):
+    def generate_signals(self, z_score):
         """Генерация торговых сигналов"""
-        signals = np.zeros(len(self.z_score))
+        signals = np.zeros(len(z_score))
         position = 0
         
-        for i in range(self.lookback, len(self.z_score)):
-            if np.isnan(self.z_score[i]):
+        for i in range(self.lookback, len(z_score)):
+            if np.isnan(z_score[i]):
                 continue
                 
             if position == 0:
-                if self.z_score[i] > self.entry_threshold:
+                if z_score[i] > self.entry_threshold:
                     signals[i] = -1
                     position = -1
-                elif self.z_score[i] < -self.entry_threshold:
+                elif z_score[i] < -self.entry_threshold:
                     signals[i] = 1
                     position = 1
-            elif position != 0 and abs(self.z_score[i]) < self.exit_threshold:
+            elif position != 0 and abs(z_score[i]) < self.exit_threshold:
                 signals[i] = 0
                 position = 0
             else:
@@ -142,26 +100,34 @@ class Backtester:
         self.signals = signals
         return self.signals
     
-    def calculate_returns(self):
-        """Расчет доходности стратегии"""
+    def calculate_returns(self, beta):
+        """Расчёт процентной доходности стратегии с учётом капитала."""
         if self.signals is None:
             raise ValueError("Сначала сгенерируйте торговые сигналы")
-            
-        returns_1 = np.diff(np.log(self.series_1))
-        returns_2 = np.diff(np.log(self.series_2))
-        strategy_returns = np.zeros(len(returns_1))
-        beta = self.cointegration['beta']
-        
-        for i in range(1, len(self.signals)):
-            if self.signals[i-1] == 1:
-                strategy_returns[i-1] = returns_1[i-1] - beta * returns_2[i-1]
-            elif self.signals[i-1] == -1:
-                strategy_returns[i-1] = -returns_1[i-1] + beta * returns_2[i-1]
-            
+
+        s1 = self.series_1
+        s2 = self.series_2
+        n = len(s1)
+        returns = np.zeros(n - 1)
+
+        for i in range(1, n):
+            pos_prev = self.signals[i-1]
+            if pos_prev == 0:
+                continue
+
+            # Номинал портфеля (долларовая нейтральность)
+            notional = abs(s1[i-1]) + abs(beta * s2[i-1])
+            if notional == 0:
+                continue
+
+            pnl = pos_prev * ((s1[i] - s1[i-1]) - beta * (s2[i] - s2[i-1]))
+            returns[i-1] = pnl / notional
+
+            # Комиссии при смене позиции (две ножки)
             if i > 1 and self.signals[i-1] != self.signals[i-2]:
-                strategy_returns[i-1] -= 2 * self.transaction_cost
-        
-        self.returns = strategy_returns
+                returns[i-1] -= 2 * self.transaction_cost
+
+        self.returns = returns
         return self.returns
     
     def performance_metrics(self):
@@ -169,24 +135,28 @@ class Backtester:
         if self.returns is None:
             raise ValueError("Сначала рассчитайте доходность")
         
-        # Количество часов в торговом году (252 дня * 7 часов)
+        # Количество торговых часов в году (примерно)
         HOURS_IN_YEAR = 252 * 7
-        
-        # Получаем реальное количество часовых интервалов
+
         n_hours = len(self.returns)
-        
-        # Расчет годового коэффициента
+
+        if n_hours == 0:
+            raise ValueError("Пустой массив доходностей")
+
+        # Кумулятивная доходность (compound)
+        equity_curve = np.cumprod(1 + self.returns)
+        total_return = equity_curve[-1] - 1
+
         annual_factor = HOURS_IN_YEAR / n_hours
+        annual_return = (1 + total_return) ** annual_factor - 1
+
+        volatility = np.std(self.returns) * np.sqrt(HOURS_IN_YEAR)
         
-        total_return = np.sum(self.returns)
-        annual_return = total_return * annual_factor
-        volatility = np.std(self.returns) * np.sqrt(annual_factor)
+        # Коэффициент Шарпа
         sharpe_ratio = annual_return / volatility if volatility != 0 else 0
         
-        # Просадка
-        cumulative = np.cumsum(self.returns)
-        peak = np.maximum.accumulate(cumulative)
-        drawdown = cumulative - peak
+        peak = np.maximum.accumulate(equity_curve)
+        drawdown = equity_curve / peak - 1
         max_drawdown = np.min(drawdown)
         
         # Дополнительная информация о временных интервалах
@@ -226,53 +196,56 @@ class Backtester:
             'max_drawdown_dist': max_drawdowns
         }
     
-    def run_full_backtest(self):
+    def run_full_backtest(self, analyzer: DataAnalyzer):
         """Запуск полного цикла бэктестинга"""
-        # Шаг 1: Проверка стационарности
-        self.stationarity = {
-            'asset_1': self.adf_test(self.series_1),
-            'asset_2': self.adf_test(self.series_2)
-        }
+        # Шаг 1: Проверка коинтеграции
+        cointegration = analyzer.engle_granger_test(self.series_1, self.series_2)
         
-        # Шаг 2: Проверка коинтеграции
-        self.cointegration = self.engle_granger_test()
-        
-        if not self.cointegration['is_cointegrated']:
+        if not cointegration['is_cointegrated']:
             raise ValueError("Активы не коинтегрированы")
         
-        # Шаг 3: Генерация сигналов
-        self.calculate_zscore()
-        self.generate_signals()
+        # Шаг 2: Генерация сигналов
+        z_score = analyzer.calculate_zscore(
+            self.series_1,
+            self.series_2,
+            cointegration['beta'],
+            self.lookback,
+            cointegration['alpha']
+        )
+        self.generate_signals(z_score)
         
-        # Шаг 4: Расчет доходности
-        self.calculate_returns()
+        # Шаг 3: Расчет доходности
+        self.calculate_returns(cointegration['beta'])
         
-        # Шаг 5: Расчет метрик
+        # Шаг 4: Расчет метрик
         self.performance = self.performance_metrics()
         
-        # Шаг 6: Анализ рисков
+        # Шаг 5: Анализ рисков
         self.risk_analysis = self.monte_carlo_analysis()
         
         return {
-            'stationarity': self.stationarity,
-            'cointegration': self.cointegration,
+            'cointegration': cointegration,
             'performance': self.performance,
             'risk_analysis': self.risk_analysis,
             'returns': self.returns
         }
 
-def print_backtest_results(results, layout="single"):
+def print_backtest_results(results, layout="single", pair_name=None):
     """Вывод результатов бэктеста с использованием rich
     
     Args:
         results: Результаты бэктеста
         layout: "single" для одной таблицы, "horizontal" для таблиц в строку
+        pair_name: Название пары для отображения в заголовке
     """
     console = Console()
     
     if layout == "single":
         # Создаем одну общую таблицу
-        results_table = Table(title="Результаты бэктеста")
+        title = "Результаты бэктеста"
+        if pair_name:
+            title += f" для пары {pair_name}"
+        results_table = Table(title=title)
         results_table.add_column("Метрика", style="cyan")
         results_table.add_column("Значение", style="green")
         
@@ -362,9 +335,6 @@ def print_backtest_results(results, layout="single"):
         ))
 
 if __name__ == "__main__":
-
-    series_1, series_2 = pd.Series, pd.Series
-
     data_manager = DataManager()
     analyzer = DataAnalyzer()
 
@@ -383,7 +353,7 @@ if __name__ == "__main__":
     
     # Инициализация и запуск бэктеста
     backtester = Backtester(series_1, series_2, lookback=60)
-    results = backtester.run_full_backtest()
+    results = backtester.run_full_backtest(analyzer=analyzer)
     
-    # Вывод результатов
-    print_backtest_results(results)
+    pair_name = f"{pair[0]}-{pair[1]}"
+    print_backtest_results(results, pair_name=pair_name)
