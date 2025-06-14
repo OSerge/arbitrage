@@ -338,6 +338,35 @@ def print_backtest_results(results, layout="single", pair_name=None):
             border_style="blue"
         ))
 
+def print_summary_results(results_dict):
+    """Вывод сводной таблицы результатов бэктеста для нескольких пар
+    
+    Args:
+        results_dict: Словарь с результатами бэктеста для каждой пары
+    """
+    console = Console()
+    
+    # Создаем сводную таблицу
+    summary_table = Table(title="Сводные результаты бэктеста")
+    summary_table.add_column("Пара", style="cyan")
+    summary_table.add_column("Коэффициент Шарпа", style="green")
+    summary_table.add_column("Годовая доходность", style="green")
+    summary_table.add_column("Максимальная просадка", style="green")
+    summary_table.add_column("VaR 95%", style="green")
+    summary_table.add_column("CVaR 95%", style="green")
+    
+    for pair, results in results_dict.items():
+        summary_table.add_row(
+            pair,
+            f"{results['performance']['sharpe_ratio']:.2f}",
+            f"{results['performance']['annual_return']:.2%}",
+            f"{results['performance']['max_drawdown']:.2%}",
+            f"{results['risk_analysis']['var_95']:.2%}",
+            f"{results['risk_analysis']['cvar_95']:.2%}"
+        )
+    
+    console.print(summary_table)
+
 if __name__ == "__main__":
     data_manager = DataManager()
     analyzer = DataAnalyzer()
