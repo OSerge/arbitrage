@@ -8,19 +8,16 @@ import logging
 import os
 from itertools import combinations
 
-from data import DataManager
-from analysis import DataAnalyzer
+from core.data import DataManager
+from core.analysis import DataAnalyzer
 
-
-# Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# --- Константы рынка Мосбиржи ---
-TRADING_HOURS_PER_DAY = 15  # Фьючерсы торгуются ~15 часов в день
+TRADING_HOURS_PER_DAY = 15  # Фьючерсы торгуются ~15 часов в день (убрал 1 час утренней сессии)
 TRADING_DAYS_PER_YEAR = 252  # Среднее количество торговых дней
 HOURS_IN_YEAR = TRADING_HOURS_PER_DAY * TRADING_DAYS_PER_YEAR
 
@@ -74,7 +71,6 @@ class Backtester:
         self.broker_commission = broker_commission
         self.exchange_commission = exchange_commission
         
-        # Результаты тестов
         self.signals = None
         self.returns = None
         self.performance = None
@@ -120,7 +116,6 @@ class Backtester:
             if pos_prev == 0:
                 continue
 
-            # Номинал портфеля (долларовая нейтральность)
             notional = abs(s1[i-1]) + abs(beta * s2[i-1])
             if notional == 0:
                 continue
@@ -128,7 +123,6 @@ class Backtester:
             pnl = pos_prev * ((s1[i] - s1[i-1]) - beta * (s2[i] - s2[i-1]))
             returns[i-1] = pnl / notional
 
-            # Комиссии при смене позиции (две ножки)
             if i > 1 and self.signals[i-1] != self.signals[i-2]:
                 # Комиссия за два контракта (вход и выход)
                 total_commission = 2 * (self.broker_commission + self.exchange_commission)
@@ -374,19 +368,33 @@ if __name__ == "__main__":
     symbol_pairs = generate_symbol_pairs(futures)
     check_files(symbol_pairs)
 
+    all_results = {}
+    
     for pair in symbol_pairs:
-        df1 = data_manager.storage.load_data_from_csv(pair[0])
-        df2 = data_manager.storage.load_data_from_csv(pair[1])
+        try:
+            df1 = data_manager.load_data_with_cache(pair[0])
+            df2 = data_manager.load_data_with_cache(pair[1])
 
-        merged_df = analyzer.join_pair(df1, df2)
-        if merged_df.empty:
-            raise ValueError("Пустой датафрейм для анализа")
-        
-        series_1, series_2 = merged_df['close_1'], merged_df['close_2']
+            merged_df = analyzer.join_pair(df1, df2)
+            if merged_df.empty:
+                logger.warning(f"Пустой датафрейм для пары {pair[0]}-{pair[1]}, пропускаем")
+                continue
+            
+            series_1, series_2 = merged_df['close_1'], merged_df['close_2']
+            
+            backtester = Backtester(series_1, series_2, lookback=60)
+            results = backtester.run_full_backtest(analyzer=analyzer)
+            
+            pair_name = f"{pair[0]}-{pair[1]}"
+            all_results[pair_name] = results
+            
+            print_backtest_results(results, pair_name=pair_name)
+            print()
+            
+        except Exception as e:
+            logger.error(f"Ошибка при обработке пары {pair[0]}-{pair[1]}: {e}")
+            continue
     
-    # Инициализация и запуск бэктеста
-    backtester = Backtester(series_1, series_2, lookback=60)
-    results = backtester.run_full_backtest(analyzer=analyzer)
-    
-    pair_name = f"{pair[0]}-{pair[1]}"
-    print_backtest_results(results, pair_name=pair_name)
+    if all_results:
+        print("\n" + "="*80)
+        print_summary_results(all_results)
