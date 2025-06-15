@@ -4,10 +4,12 @@ import pandas as pd
 import numpy as np
 from statsmodels.tsa.stattools import coint, adfuller
 
+from core.interfaces import IAnalyzer
+
 logger = logging.getLogger(__name__)
 
 
-class DataAnalyzer:
+class DataAnalyzer(IAnalyzer):
     """Класс для анализа коинтеграции
     
     Формат данных в исходных .csv:
@@ -140,13 +142,25 @@ class DataAnalyzer:
     @staticmethod
     def join_pair(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
         """
-        Склеивает загруженные датафреймы фьючерсов по индексу 'time'.
+        Склеивает загруженные датафреймы фьючерсов по времени.
 
-        Возвращает DataFrame, где столбцы — это 'close'.
+        Возвращает DataFrame, где столбцы — это 'close_1' и 'close_2'.
         """
+        # Создаем копии датафреймов для безопасности
+        df1_copy = df1.copy()
+        df2_copy = df2.copy()
+        
+        # Преобразуем время в datetime и устанавливаем как индекс
+        df1_copy['time'] = pd.to_datetime(df1_copy['time'], unit='s')
+        df2_copy['time'] = pd.to_datetime(df2_copy['time'], unit='s')
+        
+        df1_copy.set_index('time', inplace=True)
+        df2_copy.set_index('time', inplace=True)
+        
+        # Объединяем по времени
         return pd.merge(
-            df1['close'], 
-            df2['close'], 
+            df1_copy['close'], 
+            df2_copy['close'], 
             left_index=True, 
             right_index=True, 
             suffixes=("_1", "_2")

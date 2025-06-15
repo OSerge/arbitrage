@@ -4,7 +4,9 @@ import logging
 from typing import Dict, Any, List, Union
 import pandas as pd
 
-class AlorAPI:
+from core.interfaces import IDataProvider
+
+class AlorAPI(IDataProvider):
     """Класс для работы с API Alor"""
     
     def __init__(

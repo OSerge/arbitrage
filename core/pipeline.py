@@ -3,12 +3,11 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Tuple
 import pandas as pd
 
-from downloader import SecurityDownloader
-from analysis import DataAnalyzer
-from data import DataManager, DataStorage
-from backtest import Backtester, print_backtest_results, print_summary_results
+from core.downloader import SecurityDownloader
+from core.analysis import DataAnalyzer
+from core.data import DataManager, DataStorage
+from core.backtest import Backtester, print_backtest_results, print_summary_results
 
-# Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -100,7 +99,6 @@ class ArbitragePipeline:
         # Создаем DataFrame со всеми ценами
         prices_df = pd.DataFrame(data_dict)
         
-        # Проверяем наличие пропусков и выравниваем данные
         if prices_df.isnull().any().any():
             logger.warning("Обнаружены пропуски в данных. Выполняется выравнивание...")
             prices_df = prices_df.dropna()
@@ -148,7 +146,6 @@ class ArbitragePipeline:
             symbol1, symbol2 = pair
             logger.info(f"Бэктест для пары {symbol1}-{symbol2}")
             
-            # Загружаем данные
             df1 = self.data_storage.load_data_from_csv(symbol1)
             df2 = self.data_storage.load_data_from_csv(symbol2)
             
@@ -157,13 +154,11 @@ class ArbitragePipeline:
             #     logger.info(f"Недостаточная ликвидность для пары {symbol1}-{symbol2}, пропуск")
             #     continue
             
-            # Объединяем данные с помощью join_pair
             merged_df = self.analyzer.join_pair(df1, df2)
             if merged_df.empty:
                 logger.warning(f"Пустой датафрейм для пары {symbol1}-{symbol2}")
                 continue
                 
-            # Проверяем наличие пропусков после склейки
             if merged_df.isnull().any().any():
                 logger.warning(f"Обнаружены пропуски в данных для пары {symbol1}-{symbol2}")
                 merged_df = merged_df.dropna()
@@ -171,7 +166,6 @@ class ArbitragePipeline:
                     logger.error(f"Недостаточно данных после очистки: {len(merged_df)} строк")
                     continue
             
-            # Создаем бэктестер
             backtester = Backtester(
                 series_1=merged_df['close_1'],
                 series_2=merged_df['close_2'],
@@ -182,7 +176,6 @@ class ArbitragePipeline:
                 exchange_commission=self.exchange_commission
             )
             
-            # Запускаем бэктест
             try:
                 pair_results = backtester.run_full_backtest(self.analyzer)
                 results[f"{symbol1}-{symbol2}"] = pair_results
@@ -204,16 +197,13 @@ class ArbitragePipeline:
         Returns:
             Dict: Результаты пайплайна
         """
-        # Шаг 1: Загрузка данных
         self.download_data(days)
         
-        # Шаг 2: Поиск коинтегрированных пар
         pairs = self.find_cointegrated_pairs(min_pairs)
         if not pairs:
             logger.error("Не найдено коинтегрированных пар")
             return {}
         
-        # Шаг 3: Бэктест
         results = self.run_backtest(pairs)
         
         return {
@@ -223,7 +213,6 @@ class ArbitragePipeline:
 
 
 def main():
-    # Список фьючерсов для анализа
     futures = [
         "GKM5", # Обыкновенные акции ПАО «ГМК «Норильский никель»
         "GZM5", # Газпром обыкновенные
@@ -237,7 +226,6 @@ def main():
         "VBM5", # ВТБ
     ]
     
-    # Создаем и запускаем пайплайн
     pipeline = ArbitragePipeline(
         symbols=futures,
         lookback=60,
@@ -251,7 +239,6 @@ def main():
     
     results = pipeline.run_pipeline(days=120, min_pairs=1)
     
-    # Выводим результаты
     if results:
         print("\nНайденные коинтегрированные пары:")
         for pair in results['pairs']:

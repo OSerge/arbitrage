@@ -5,8 +5,8 @@ from typing import List, Dict, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 
-from alor import AlorAPI
-from data import DataManager, DataStorage
+from core.alor import AlorAPI
+from core.data import DataManager, DataStorage
 
 logging.basicConfig(
     level=logging.INFO,
@@ -64,7 +64,6 @@ class SecurityDownloader:
             Exception: При ошибке загрузки данных
         """
         try:
-            # logger.info(f"Загрузка данных для {symbol}")
             timeframe = timeframe or self.default_timeframe
             exchange = exchange or self.default_exchange
             instrument_group = instrument_group or self.default_instrument_group
@@ -82,7 +81,6 @@ class SecurityDownloader:
             )
             
             self.data_storage.save_data_to_csv(symbol, data)
-            # logger.info(f"Данные для {symbol} успешно сохранены")
             
             return data
             
