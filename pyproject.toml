@@ -10,8 +10,10 @@ dependencies = [
     "numpy>=2.2.6",
     "pandas>=2.2.3",
     "requests>=2.32.3",
+    "rich>=14.0.0",
     "ruff>=0.11.11",
     "statsmodels>=0.14.4",
+    "tqdm>=4.67.1",
 ]
 
 [dependency-groups]
@@ -25,10 +27,6 @@ lint = [
     "ruff>=0.11.11",
 ]
 
-[build-system]
-requires = ["setuptools>=42", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [tool.pytest.ini_options]
 pythonpath = [
     "."
@@ -39,3 +37,6 @@ testpaths = [
 python_files = [
     "test_*.py"
 ]
+
+[tool.setuptools.packages.find]
+include = ["core*"]
