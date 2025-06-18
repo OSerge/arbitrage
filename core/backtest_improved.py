@@ -80,9 +80,7 @@ class ReturnsCalculator:
     
     def _calculate_commission(self) -> float:
         """Расчет общей комиссии за сделку"""
-        # Комиссия за два контракта (вход и выход)
         total_commission = 2 * (self.broker_commission + self.exchange_commission)
-        # Добавляем НДС к комиссии брокера
         total_commission += 2 * (self.broker_commission * self.vat_rate)
         return total_commission
 
@@ -108,18 +106,14 @@ class PerformanceAnalyzer:
         annual_factor = self.trading_config.hours_in_year / n_hours
         annual_return = (1 + total_return) ** annual_factor - 1
 
-        # Волатильность
         volatility = np.std(returns) * np.sqrt(self.trading_config.hours_in_year)
         
-        # Коэффициент Шарпа
         sharpe_ratio = annual_return / volatility if volatility != 0 else 0
         
-        # Максимальная просадка
         peak = np.maximum.accumulate(equity_curve)
         drawdown = equity_curve / peak - 1
         max_drawdown = np.min(drawdown)
         
-        # Дополнительная информация о временных интервалах
         time_info = {
             'total_hours': n_hours,
             'trading_days': n_hours / self.trading_config.TRADING_HOURS_PER_DAY,
@@ -174,7 +168,6 @@ class ImprovedBacktester(IBacktester):
         self.series_1 = np.array(series_1)
         self.series_2 = np.array(series_2)
         
-        # Используем конфигурацию по умолчанию или переданную
         backtest_config = config or BACKTEST_CONFIG.__dict__
         
         self.signal_generator = SignalGenerator(
@@ -193,7 +186,6 @@ class ImprovedBacktester(IBacktester):
         
         self.lookback = backtest_config.get('lookback', 60)
         
-        # Результаты
         self.signals = None
         self.returns = None
         self.performance = None
@@ -201,13 +193,11 @@ class ImprovedBacktester(IBacktester):
     
     def run_backtest(self, analyzer: IAnalyzer) -> Dict:
         """Запуск полного цикла бэктестинга"""
-        # Проверка коинтеграции
         cointegration = analyzer.check_cointegration(self.series_1, self.series_2)
         
         if not cointegration['is_cointegrated']:
             raise ValueError("Активы не коинтегрированы")
         
-        # Расчет Z-score
         z_score = analyzer.calculate_zscore(
             pd.Series(self.series_1),
             pd.Series(self.series_2),
@@ -216,18 +206,14 @@ class ImprovedBacktester(IBacktester):
             cointegration['alpha']
         )
         
-        # Генерация сигналов
         self.signals = self.signal_generator.generate_signals(z_score)
         
-        # Расчет доходности
         self.returns = self.returns_calculator.calculate_returns(
             self.series_1, self.series_2, self.signals, cointegration['beta']
         )
         
-        # Анализ производительности
         self.performance = self.performance_analyzer.calculate_metrics(self.returns)
         
-        # Анализ рисков
         self.risk_analysis = self.risk_analyzer.monte_carlo_analysis(self.returns)
         
         return {
