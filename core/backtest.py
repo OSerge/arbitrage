@@ -17,23 +17,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-TRADING_HOURS_PER_DAY = 15  # Фьючерсы торгуются ~15 часов в день (убрал 1 час утренней сессии)
-TRADING_DAYS_PER_YEAR = 252  # Среднее количество торговых дней
+TRADING_HOURS_PER_DAY = 16   # Торгуем 16 часов в день
+TRADING_DAYS_PER_YEAR = 252  # Среднее количество торговых дней в году
 HOURS_IN_YEAR = TRADING_HOURS_PER_DAY * TRADING_DAYS_PER_YEAR
 
 futures = [
-    # "GKM5", # Обыкновенные акции ПАО «ГМК «Норильский никель»
-    # "GZM5", # Газпром обыкновенные
-    # "CHM5", # обыкновенные акции ПАО «Северсталь»
-    # "TTM5", # Татнефть
-    # "TNM5", # Транснефть
-    # "RNM5", # Роснефть
-    # "LKM5", # Лукойл
+    "GKM5", # Обыкновенные акции ПАО «ГМК «Норильский никель»
+    "GZM5", # Газпром обыкновенные
+    "CHM5", # обыкновенные акции ПАО «Северсталь»
+    "TTM5", # Татнефть
+    "TNM5", # Транснефть
+    "RNM5", # Роснефть
+    "LKM5", # Лукойл
     "SRM5", # обыкновенные акции ПАО Сбербанк
     "SPM5", # привилег. акции ПАО Сбербанк
-    # "VBM5", # ВТБ
-    # "GDM5", # золото
-    # "SVM5", # серебро
+    "VBM5", # ВТБ
 ]
 
 def generate_symbol_pairs(symbols: list[str]) -> list[tuple]:
@@ -51,7 +49,8 @@ class Backtester:
     """Класс для комплексного бэктестинга"""
     
     def __init__(self, series_1, series_2, lookback=60, entry_threshold=2.0,
-                 exit_threshold=0.5, broker_commission=1.0, exchange_commission=1.0):
+                 exit_threshold=0.5, broker_commission=1.0, exchange_commission_rate=0.02,
+                 min_estimation_window=512):
         """
         Инициализация параметров бэктестера
         
@@ -60,8 +59,9 @@ class Backtester:
         :param lookback: Окно наблюдения для расчета параметров
         :param entry_threshold: Порог входа в сделку (в стандартных отклонениях)
         :param exit_threshold: Порог выхода из сделки
-        :param broker_commission: Комиссия брокера за контракт в рублях
-        :param exchange_commission: Комиссия биржи за контракт в рублях
+        :param broker_commission: Комиссия брокера за сделку в рублях (фиксированная)
+        :param exchange_commission_rate: Комиссия биржи в процентах от суммы сделки
+        :param min_estimation_window: Минимальное окно для оценки коинтеграции (часов)
         """
         self.series_1 = np.array(series_1)
         self.series_2 = np.array(series_2)
@@ -69,7 +69,8 @@ class Backtester:
         self.entry_threshold = entry_threshold
         self.exit_threshold = exit_threshold
         self.broker_commission = broker_commission
-        self.exchange_commission = exchange_commission
+        self.exchange_commission_rate = exchange_commission_rate
+        self.min_estimation_window = min_estimation_window
         
         self.signals = None
         self.returns = None
@@ -120,14 +121,21 @@ class Backtester:
             if notional == 0:
                 continue
 
+            # PnL от изменения спреда
             pnl = pos_prev * ((s1[i] - s1[i-1]) - beta * (s2[i] - s2[i-1]))
             returns[i-1] = pnl / notional
 
+            # Комиссии применяются только при изменении позиции
             if i > 1 and self.signals[i-1] != self.signals[i-2]:
-                # Комиссия за два контракта (вход и выход)
-                total_commission = 2 * (self.broker_commission + self.exchange_commission)
-                # Добавляем НДС к комиссии брокера
-                total_commission += 2 * (self.broker_commission * 0.2)  # 20% НДС
+                # Фиксированная комиссия брокера за сделку
+                broker_cost = self.broker_commission 
+                # Добавляем НДС к комиссии брокера (20%)
+                broker_cost_with_vat = broker_cost * 1.2
+                
+                # комиссия биржи от стоимости сделки 
+                exchange_cost = notional * self.exchange_commission_rate / 100 
+                
+                total_commission = broker_cost_with_vat + exchange_cost
                 returns[i-1] -= total_commission / notional
 
         self.returns = returns
@@ -162,7 +170,6 @@ class Backtester:
         drawdown = equity_curve / peak - 1
         max_drawdown = np.min(drawdown)
         
-        # Дополнительная информация о временных интервалах
         time_info = {
             'total_hours': n_hours,
             'trading_days': n_hours / TRADING_HOURS_PER_DAY,
@@ -200,33 +207,109 @@ class Backtester:
         }
     
     def run_full_backtest(self, analyzer: DataAnalyzer):
-        """Запуск полного цикла бэктестинга"""
-        cointegration = analyzer.engle_granger_test(self.series_1, self.series_2)
+        """
+        Запуск walk-forward бэктестинга без look-ahead bias
         
-        if not cointegration['is_cointegrated']:
-            raise ValueError("Активы не коинтегрированы")
+        Коэффициенты коинтеграции пересчитываются на каждом шаге, 
+        используя только прошлые данные.
+        """
+        n = len(self.series_1)
+        signals = np.zeros(n)
         
-        z_score = analyzer.calculate_zscore(
-            self.series_1,
-            self.series_2,
-            cointegration['beta'],
-            self.lookback,
-            cointegration['alpha']
-        )
-        self.generate_signals(z_score)
+        current_position = 0
+        current_coint_result = None
+        recompute_frequency = 168  # Пересчитываем коинтеграцию раз в неделю (168 часов)
         
-        self.calculate_returns(cointegration['beta'])
+        logger.info(f"Запуск бэктеста на {n} точках")
         
+        current_coint_result = self._estimate_cointegration_at_point(analyzer, self.min_estimation_window)
+        
+        for i in range(self.min_estimation_window, n):
+            # Периодически пересчитываем коинтеграцию используя только данные до момента i
+            if i % recompute_frequency == 0:
+                new_coint_result = self._estimate_cointegration_at_point(analyzer, i)
+                if new_coint_result is not None:
+                    current_coint_result = new_coint_result
+            
+            if (current_coint_result is None or 
+                not current_coint_result.get('is_cointegrated', False)):
+                signals[i] = 0
+                current_position = 0
+                continue
+            
+            z_score = self._calculate_current_zscore(i, current_coint_result)
+            
+            new_signal = self._generate_signal_at_point(z_score, current_position)
+            signals[i] = new_signal
+            current_position = new_signal
+        
+        self.signals = signals
+        
+        if current_coint_result is None or not current_coint_result.get('is_cointegrated', False):
+            raise ValueError("Активы не коинтегрированы ни на одном интервале")
+        
+        self.calculate_returns(current_coint_result['beta'])
         self.performance = self.performance_metrics()
-        
         self.risk_analysis = self.monte_carlo_analysis()
         
         return {
-            'cointegration': cointegration,
+            'cointegration': current_coint_result,
             'performance': self.performance,
             'risk_analysis': self.risk_analysis,
             'returns': self.returns
         }
+    
+    def _estimate_cointegration_at_point(self, analyzer, end_idx):
+        """Оценка коинтеграции на данных до определенной точки"""
+        try:
+            # Используем только данные до текущего момента
+            estimation_data_1 = pd.Series(self.series_1[:end_idx])
+            estimation_data_2 = pd.Series(self.series_2[:end_idx])
+            
+            return analyzer.engle_granger_test(estimation_data_1, estimation_data_2)
+        except Exception as e:
+            logger.warning(f"Ошибка при тесте коинтеграции на индексе {end_idx}: {e}")
+            return None
+    
+    def _calculate_current_zscore(self, current_idx, coint_result):
+        """Расчет Z-score для текущего момента без look-ahead bias"""
+        if current_idx < self.lookback:
+            return np.nan
+        
+        # Используем только данные до текущего момента для расчета статистик
+        lookback_start = current_idx - self.lookback
+        s1_window = self.series_1[lookback_start:current_idx]
+        s2_window = self.series_2[lookback_start:current_idx]
+        
+        # Спред на историческом окне
+        spread_window = s1_window - coint_result['beta'] * s2_window - coint_result['alpha']
+        spread_mean = np.mean(spread_window)
+        spread_std = np.std(spread_window)
+        
+        if spread_std == 0:
+            return np.nan
+        
+        current_spread = (self.series_1[current_idx] - 
+                         coint_result['beta'] * self.series_2[current_idx] - 
+                         coint_result['alpha'])
+        
+        return (current_spread - spread_mean) / spread_std
+    
+    def _generate_signal_at_point(self, z_score, current_position):
+        """Генерация торгового сигнала для текущей точки"""
+        if np.isnan(z_score):
+            return current_position
+        
+        if current_position == 0:
+            if z_score > self.entry_threshold:
+                return -1  # Короткая позиция
+            elif z_score < -self.entry_threshold:
+                return 1   # Длинная позиция
+        else:
+            if abs(z_score) < self.exit_threshold:
+                return 0   # Закрытие позиции
+        
+        return current_position
 
 def print_backtest_results(results, layout="single", pair_name=None):
     """Вывод результатов бэктеста с использованием rich
@@ -239,7 +322,6 @@ def print_backtest_results(results, layout="single", pair_name=None):
     console = Console()
     
     if layout == "single":
-        # Создаем одну общую таблицу
         title = "Результаты бэктеста"
         if pair_name:
             title += f" для пары {pair_name}"
@@ -247,7 +329,6 @@ def print_backtest_results(results, layout="single", pair_name=None):
         results_table.add_column("Метрика", style="cyan")
         results_table.add_column("Значение", style="green")
         
-        # Добавляем разделитель для коинтеграции
         results_table.add_row("[bold blue]Тест коинтеграции[/bold blue]", "")
         for param, value in results['cointegration'].items():
             if param != 'critical_values':
@@ -256,14 +337,12 @@ def print_backtest_results(results, layout="single", pair_name=None):
                     f"{value:.4f}" if isinstance(value, float) else str(value)
                 )
         
-        # Добавляем разделитель для временных интервалов
         results_table.add_row("[bold blue]Временные интервалы[/bold blue]", "")
         time_info = results['performance']['time_info']
         results_table.add_row("Всего часов", f"{time_info['total_hours']:.0f}")
         results_table.add_row("Торговых дней", f"{time_info['trading_days']:.1f}")
         results_table.add_row("Годовой коэффициент", f"{time_info['annual_factor']:.2f}")
         
-        # Добавляем разделитель для метрик производительности
         results_table.add_row("[bold blue]Метрики производительности[/bold blue]", "")
         for metric, value in results['performance'].items():
             if metric != 'time_info':
@@ -272,7 +351,6 @@ def print_backtest_results(results, layout="single", pair_name=None):
                     f"{value:.2%}" if metric != 'sharpe_ratio' else f"{value:.2f}"
                 )
         
-        # Добавляем разделитель для анализа рисков
         results_table.add_row("[bold blue]Анализ рисков[/bold blue]", "")
         results_table.add_row("VaR 95%", f"{results['risk_analysis']['var_95']:.2%}")
         results_table.add_row("CVaR 95%", f"{results['risk_analysis']['cvar_95']:.2%}")
@@ -280,10 +358,8 @@ def print_backtest_results(results, layout="single", pair_name=None):
         console.print(results_table)
         
     elif layout == "horizontal":
-        # Создаем таблицы для каждого раздела
         tables = []
         
-        # Таблица коинтеграции
         cointegration_table = Table(title="Тест коинтеграции")
         cointegration_table.add_column("Параметр", style="cyan")
         cointegration_table.add_column("Значение", style="green")
@@ -295,7 +371,6 @@ def print_backtest_results(results, layout="single", pair_name=None):
                 )
         tables.append(cointegration_table)
         
-        # Таблица временных интервалов
         time_table = Table(title="Временные интервалы")
         time_table.add_column("Метрика", style="cyan")
         time_table.add_column("Значение", style="green")
@@ -305,7 +380,6 @@ def print_backtest_results(results, layout="single", pair_name=None):
         time_table.add_row("Годовой коэффициент", f"{time_info['annual_factor']:.2f}")
         tables.append(time_table)
         
-        # Таблица метрик производительности
         performance_table = Table(title="Метрики производительности")
         performance_table.add_column("Метрика", style="cyan")
         performance_table.add_column("Значение", style="green")
@@ -317,7 +391,6 @@ def print_backtest_results(results, layout="single", pair_name=None):
                 )
         tables.append(performance_table)
         
-        # Таблица анализа рисков
         risk_table = Table(title="Анализ рисков")
         risk_table.add_column("Метрика", style="cyan")
         risk_table.add_column("Значение", style="green")
@@ -325,7 +398,6 @@ def print_backtest_results(results, layout="single", pair_name=None):
         risk_table.add_row("CVaR 95%", f"{results['risk_analysis']['cvar_95']:.2%}")
         tables.append(risk_table)
         
-        # Выводим все таблицы в одну строку
         console.print(Panel.fit(
             Group(*tables),
             title="Результаты бэктеста",
@@ -340,7 +412,6 @@ def print_summary_results(results_dict):
     """
     console = Console()
     
-    # Создаем сводную таблицу
     summary_table = Table(title="Сводные результаты бэктеста")
     summary_table.add_column("Пара", style="cyan")
     summary_table.add_column("Коэффициент Шарпа", style="green")
@@ -382,7 +453,14 @@ if __name__ == "__main__":
             
             series_1, series_2 = merged_df['close_1'], merged_df['close_2']
             
-            backtester = Backtester(series_1, series_2, lookback=60)
+            # Предварительная проверка коинтеграции
+            preliminary_coint = analyzer.engle_granger_test(series_1, series_2)
+            if not preliminary_coint['is_cointegrated']:
+                logger.warning(f"Пара {pair[0]}-{pair[1]} не коинтегрирована, пропускаем")
+                continue
+            
+            backtester = Backtester(series_1, series_2, lookback=60, 
+                                   entry_threshold=2.0, exit_threshold=0.5)
             results = backtester.run_full_backtest(analyzer=analyzer)
             
             pair_name = f"{pair[0]}-{pair[1]}"
