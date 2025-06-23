@@ -50,7 +50,9 @@ class Backtester:
     
     def __init__(self, series_1, series_2, lookback=60, entry_threshold=2.0,
                  exit_threshold=0.5, broker_commission=1.0, exchange_commission_rate=0.02,
-                 min_estimation_window=512):
+                 min_estimation_window=512, enable_slippage=False, enable_bid_ask_spread=False,
+                 slippage_rate=0.02, bid_ask_spread_rate=0.05, 
+                 ohlcv_data_1=None, ohlcv_data_2=None, recompute_frequency=16):
         """
         Инициализация параметров бэктестера
         
@@ -62,6 +64,13 @@ class Backtester:
         :param broker_commission: Комиссия брокера за сделку в рублях (фиксированная)
         :param exchange_commission_rate: Комиссия биржи в процентах от суммы сделки
         :param min_estimation_window: Минимальное окно для оценки коинтеграции (часов)
+        :param enable_slippage: Включить учет проскальзывания
+        :param enable_bid_ask_spread: Включить учет bid-ask спреда
+        :param slippage_rate: Проскальзывание в процентах (по умолчанию 0.02%)
+        :param bid_ask_spread_rate: Bid-ask спред в процентах (по умолчанию 0.05%)
+        :param ohlcv_data_1: OHLCV данные первого актива (DataFrame с колонками open, high, low, close, volume)
+        :param ohlcv_data_2: OHLCV данные второго актива (DataFrame с колонками open, high, low, close, volume)
+        :param recompute_frequency: Частота пересчета коинтеграции в часах (по умолчанию 16)
         """
         self.series_1 = np.array(series_1)
         self.series_2 = np.array(series_2)
@@ -71,6 +80,15 @@ class Backtester:
         self.broker_commission = broker_commission
         self.exchange_commission_rate = exchange_commission_rate
         self.min_estimation_window = min_estimation_window
+        
+        # Параметры для учета реалистичных торговых условий
+        self.enable_slippage = enable_slippage
+        self.enable_bid_ask_spread = enable_bid_ask_spread
+        self.slippage_rate = slippage_rate / 100  # Перевод в доли
+        self.bid_ask_spread_rate = bid_ask_spread_rate / 100  
+        self.ohlcv_data_1 = ohlcv_data_1
+        self.ohlcv_data_2 = ohlcv_data_2
+        self.recompute_frequency = recompute_frequency
         
         self.signals = None
         self.returns = None
@@ -117,22 +135,57 @@ class Backtester:
             if pos_prev == 0:
                 continue
 
+            # Цены для расчета PnL
+            if self.enable_slippage or self.enable_bid_ask_spread:
+                if i > 1 and self.signals[i-1] != self.signals[i-2]:
+                    if (self.ohlcv_data_1 is not None and 
+                        self.ohlcv_data_2 is not None and 
+                        i-1 < len(self.ohlcv_data_1) and 
+                        i-1 < len(self.ohlcv_data_2)):
+                        
+                        # Волатильность для адаптивного slippage
+                        vol_factor = self._calculate_volatility_factor(i-1)
+                        
+                        trade_dir_1 = 1 if pos_prev > 0 else -1  # Длинная позиция по первому активу
+                        trade_dir_2 = -1 if pos_prev > 0 else 1  # Короткая позиция по второму активу
+                        
+                        # Реалистичные цены исполнения
+                        exec_price_1 = self._calculate_execution_price(
+                            s1[i-1], 
+                            self.ohlcv_data_1.iloc[i-1]['high'],
+                            self.ohlcv_data_1.iloc[i-1]['low'],
+                            trade_dir_1, vol_factor
+                        )
+                        exec_price_2 = self._calculate_execution_price(
+                            s2[i-1],
+                            self.ohlcv_data_2.iloc[i-1]['high'], 
+                            self.ohlcv_data_2.iloc[i-1]['low'],
+                            trade_dir_2, vol_factor
+                        )
+                        
+                        # PnL с учетом реалистичных цен входа и текущих цен
+                        pnl = pos_prev * ((s1[i] - exec_price_1) - beta * (s2[i] - exec_price_2))
+                    else:
+                        # Fallback к стандартному расчету
+                        pnl = pos_prev * ((s1[i] - s1[i-1]) - beta * (s2[i] - s2[i-1]))
+                else:
+                    # Обычный расчет для уже открытой позиции
+                    pnl = pos_prev * ((s1[i] - s1[i-1]) - beta * (s2[i] - s2[i-1]))
+            else:
+                # Стандартный расчет без учета slippage
+                pnl = pos_prev * ((s1[i] - s1[i-1]) - beta * (s2[i] - s2[i-1]))
+
             notional = abs(s1[i-1]) + abs(beta * s2[i-1])
             if notional == 0:
                 continue
-
-            # PnL от изменения спреда
-            pnl = pos_prev * ((s1[i] - s1[i-1]) - beta * (s2[i] - s2[i-1]))
+                
             returns[i-1] = pnl / notional
 
-            # Комиссии применяются только при изменении позиции
+            # Комиссии 
             if i > 1 and self.signals[i-1] != self.signals[i-2]:
-                # Фиксированная комиссия брокера за сделку
                 broker_cost = self.broker_commission 
-                # Добавляем НДС к комиссии брокера (20%)
                 broker_cost_with_vat = broker_cost * 1.2
                 
-                # комиссия биржи от стоимости сделки 
                 exchange_cost = notional * self.exchange_commission_rate / 100 
                 
                 total_commission = broker_cost_with_vat + exchange_cost
@@ -156,14 +209,12 @@ class Backtester:
         equity_curve = np.cumprod(1 + self.returns)
         total_return = equity_curve[-1] - 1
 
-        # Годовой коэффициент с учётом 15 торговых часов в день
+        # Годовой коэффициент с учётом 16 торговых часов в день
         annual_factor = HOURS_IN_YEAR / n_hours
         annual_return = (1 + total_return) ** annual_factor - 1
 
-        # Волатильность (часовая) годовая
         volatility = np.std(self.returns) * np.sqrt(HOURS_IN_YEAR)
         
-        # Коэффициент Шарпа
         sharpe_ratio = annual_return / volatility if volatility != 0 else 0
         
         peak = np.maximum.accumulate(equity_curve)
@@ -218,7 +269,6 @@ class Backtester:
         
         current_position = 0
         current_coint_result = None
-        recompute_frequency = 168  # Пересчитываем коинтеграцию раз в неделю (168 часов)
         
         logger.info(f"Запуск бэктеста на {n} точках")
         
@@ -226,7 +276,7 @@ class Backtester:
         
         for i in range(self.min_estimation_window, n):
             # Периодически пересчитываем коинтеграцию используя только данные до момента i
-            if i % recompute_frequency == 0:
+            if i % self.recompute_frequency == 0:
                 new_coint_result = self._estimate_cointegration_at_point(analyzer, i)
                 if new_coint_result is not None:
                     current_coint_result = new_coint_result
@@ -247,6 +297,34 @@ class Backtester:
         
         if current_coint_result is None or not current_coint_result.get('is_cointegrated', False):
             raise ValueError("Активы не коинтегрированы ни на одном интервале")
+        
+        # Проверяем есть ли торговые сигналы
+        total_signals = np.sum(np.abs(signals))
+        if total_signals == 0:
+            logger.warning("Стратегия не сгенерировала торговых сигналов")
+            # Возвращаем нулевые результаты
+            return {
+                'cointegration': current_coint_result,
+                'performance': {
+                    'total_return': 0.0,
+                    'annual_return': 0.0,
+                    'volatility': 0.0,
+                    'sharpe_ratio': 0.0,
+                    'max_drawdown': 0.0,
+                    'time_info': {
+                        'total_hours': n-1,
+                        'trading_days': (n-1) / TRADING_HOURS_PER_DAY,
+                        'annual_factor': HOURS_IN_YEAR / (n-1),
+                        'hours_in_year': HOURS_IN_YEAR
+                    }
+                },
+                'risk_analysis': {
+                    'var_95': 0.0,
+                    'cvar_95': 0.0,
+                    'max_drawdown_dist': np.array([0.0])
+                },
+                'returns': np.zeros(n-1)
+            }
         
         self.calculate_returns(current_coint_result['beta'])
         self.performance = self.performance_metrics()
@@ -300,24 +378,95 @@ class Backtester:
         if np.isnan(z_score):
             return current_position
         
-        if current_position == 0:
-            if z_score > self.entry_threshold:
-                return -1  # Короткая позиция
-            elif z_score < -self.entry_threshold:
-                return 1   # Длинная позиция
+        if z_score > self.entry_threshold:
+            return -1
+        elif z_score < -self.entry_threshold:
+            return 1
+        elif current_position != 0 and abs(z_score) < self.exit_threshold:
+            return 0
         else:
-            if abs(z_score) < self.exit_threshold:
-                return 0   # Закрытие позиции
+            return current_position
+    
+    def _calculate_execution_price(self, close_price, high_price, low_price, 
+                                   trade_direction, volatility_factor=1.0):
+        """
+        Расчет реалистичной цены исполнения с учетом slippage и bid-ask spread
         
-        return current_position
+        :param close_price: Цена закрытия
+        :param high_price: Максимальная цена за период
+        :param low_price: Минимальная цена за период  
+        :param trade_direction: Направление сделки (1 = покупка, -1 = продажа, 0 = нет сделки)
+        :param volatility_factor: Коэффициент волатильности для адаптивного slippage
+        :return: Скорректированная цена исполнения
+        """
+        if trade_direction == 0:
+            return close_price
+            
+        execution_price = close_price
+        
+        # Bid-ask спред
+        if self.enable_bid_ask_spread:
+            spread_half = close_price * self.bid_ask_spread_rate / 2
+            if trade_direction > 0:  # Покупка - платим ask
+                execution_price += spread_half
+            else:  # Продажа - получаем bid
+                execution_price -= spread_half
+        
+        # Проскальзывание на основе волатильности внутри бара
+        if self.enable_slippage:
+            # Волатильность внутри бара как доля от high-low
+            intrabar_volatility = (high_price - low_price) / close_price if close_price > 0 else 0
+            adaptive_slippage = self.slippage_rate * volatility_factor * (1 + intrabar_volatility)
+            
+            slippage_amount = close_price * adaptive_slippage
+            if trade_direction > 0:  # Покупка - цена хуже
+                execution_price += slippage_amount
+            else:  # Продажа - цена хуже
+                execution_price -= slippage_amount
+        
+        return execution_price
+    
+    def _calculate_volatility_factor(self, index):
+        """
+        Расчет коэффициента волатильности для адаптивного slippage
+        
+        :param index: Текущий индекс в данных
+        :return: Коэффициент волатильности (1.0 = средний, >1.0 = высокая волатильность)
+        """
+        if (self.ohlcv_data_1 is None or self.ohlcv_data_2 is None or 
+            index < self.lookback):
+            return 1.0
+        
+        # Считаем волатильность по последним lookback периодам
+        try:
+            # Волатильность первого актива
+            lookback_data_1 = self.ohlcv_data_1.iloc[index-self.lookback+1:index+1]
+            vol_1 = ((lookback_data_1['high'] - lookback_data_1['low']) / lookback_data_1['close']).mean()
+            
+            # Волатильность второго актива  
+            lookback_data_2 = self.ohlcv_data_2.iloc[index-self.lookback+1:index+1]
+            vol_2 = ((lookback_data_2['high'] - lookback_data_2['low']) / lookback_data_2['close']).mean()
+            
+            # Средняя волатильность по паре
+            avg_volatility = (vol_1 + vol_2) / 2
+            
+            # Нормируем относительно "типичной" волатильности (2%)
+            typical_volatility = 0.02
+            volatility_factor = min(3.0, max(0.5, avg_volatility / typical_volatility))
+            
+            return volatility_factor
+            
+        except (IndexError, KeyError):
+            return 1.0
 
-def print_backtest_results(results, layout="single", pair_name=None):
+def print_backtest_results(results, layout="single", pair_name=None, backtester=None):
     """Вывод результатов бэктеста с использованием rich
     
     Args:
         results: Результаты бэктеста
         layout: "single" для одной таблицы, "horizontal" для таблиц в строку
         pair_name: Название пары для отображения в заголовке
+        backtester: экземпляр Backtester для отображения настроек торговли
     """
     console = Console()
     
@@ -328,6 +477,19 @@ def print_backtest_results(results, layout="single", pair_name=None):
         results_table = Table(title=title)
         results_table.add_column("Метрика", style="cyan")
         results_table.add_column("Значение", style="green")
+        
+        # Настройки торговли (если передан backtester)
+        if backtester:
+            results_table.add_row("[bold blue]Настройки торговли[/bold blue]", "")
+            slippage_status = "✓ Включен" if backtester.enable_slippage else "✗ Выключен"
+            spread_status = "✓ Включен" if backtester.enable_bid_ask_spread else "✗ Выключен"
+            results_table.add_row("Учет проскальзывания", slippage_status)
+            if backtester.enable_slippage:
+                results_table.add_row("  └─ Размер slippage", f"{backtester.slippage_rate*100:.3f}%")
+            results_table.add_row("Учет bid-ask спреда", spread_status)
+            if backtester.enable_bid_ask_spread:
+                results_table.add_row("  └─ Размер спреда", f"{backtester.bid_ask_spread_rate*100:.3f}%")
+            results_table.add_row("", "")  # Разделитель
         
         results_table.add_row("[bold blue]Тест коинтеграции[/bold blue]", "")
         for param, value in results['cointegration'].items():
@@ -432,6 +594,106 @@ def print_summary_results(results_dict):
     
     console.print(summary_table)
 
+def create_enhanced_backtester(symbol1, symbol2, data_manager, **kwargs):
+    """
+    Создание расширенного бэктестера с OHLCV данными для учета slippage и bid-ask spread
+    
+    Args:
+        symbol1: Символ первого актива
+        symbol2: Символ второго актива
+        data_manager: Менеджер данных для загрузки OHLCV
+        **kwargs: Дополнительные параметры для Backtester
+        
+    Returns:
+        Backtester: Настроенный экземпляр бэктестера
+    """
+    # Загружаем данные
+    df1 = data_manager.storage.load_data(symbol1)
+    df2 = data_manager.storage.load_data(symbol2)
+    
+    # Проверяем наличие необходимых колонок
+    required_columns = ['close', 'open', 'high', 'low', 'volume']
+    for col in required_columns:
+        if col not in df1.columns or col not in df2.columns:
+            raise ValueError(f"Отсутствует колонка '{col}' в данных")
+    
+    # Синхронизируем данные по времени (если есть колонка time)
+    if 'time' in df1.columns and 'time' in df2.columns:
+        df1_indexed = df1.set_index('time')
+        df2_indexed = df2.set_index('time')
+        
+        # Берем пересечение временных меток
+        common_times = df1_indexed.index.intersection(df2_indexed.index)
+        df1_sync = df1_indexed.loc[common_times].reset_index()
+        df2_sync = df2_indexed.loc[common_times].reset_index()
+    else:
+        # Если нет временных меток, предполагаем что данные уже синхронизированы
+        min_len = min(len(df1), len(df2))
+        df1_sync = df1.iloc[:min_len].copy()
+        df2_sync = df2.iloc[:min_len].copy()
+    
+    # Создаем бэктестер
+    backtester = Backtester(
+        series_1=df1_sync['close'].values,
+        series_2=df2_sync['close'].values,
+        ohlcv_data_1=df1_sync,
+        ohlcv_data_2=df2_sync,
+        **kwargs
+    )
+    
+    return backtester
+
+def run_comparison_backtest(symbol1, symbol2, data_manager, **base_kwargs):
+    """
+    Запуск сравнительного бэктеста: наивный подход vs. реалистичный
+    
+    Args:
+        symbol1: Символ первого актива
+        symbol2: Символ второго актива  
+        data_manager: Менеджер данных
+        **base_kwargs: Базовые параметры бэктестера
+        
+    Returns:
+        dict: Результаты сравнения
+    """
+    from core.analysis import DataAnalyzer
+    
+    analyzer = DataAnalyzer()
+    
+    # Наивный бэктест (без учета slippage/spread)
+    naive_backtester = create_enhanced_backtester(
+        symbol1, symbol2, data_manager,
+        enable_slippage=False,
+        enable_bid_ask_spread=False,
+        **base_kwargs
+    )
+    
+    # Реалистичный бэктест (с учетом slippage/spread)
+    realistic_backtester = create_enhanced_backtester(
+        symbol1, symbol2, data_manager,
+        enable_slippage=True,
+        enable_bid_ask_spread=True,
+        **base_kwargs
+    )
+    
+    try:
+        naive_results = naive_backtester.run_full_backtest(analyzer)
+        realistic_results = realistic_backtester.run_full_backtest(analyzer)
+        
+        return {
+            'naive': {
+                'results': naive_results,
+                'backtester': naive_backtester
+            },
+            'realistic': {
+                'results': realistic_results,
+                'backtester': realistic_backtester
+            }
+        }
+    except Exception as e:
+        print(f"Ошибка при сравнительном бэктесте {symbol1}-{symbol2}: {e}")
+        return None
+
 if __name__ == "__main__":
     data_manager = DataManager()
     analyzer = DataAnalyzer()
@@ -453,15 +715,28 @@ if __name__ == "__main__":
             
             series_1, series_2 = merged_df['close_1'], merged_df['close_2']
             
-            # Предварительная проверка коинтеграции
-            preliminary_coint = analyzer.engle_granger_test(series_1, series_2)
-            if not preliminary_coint['is_cointegrated']:
-                logger.warning(f"Пара {pair[0]}-{pair[1]} не коинтегрирована, пропускаем")
-                continue
+            backtester = Backtester(
+                series_1, series_2, 
+                lookback=60, 
+                entry_threshold=2.0, 
+                exit_threshold=0.5,
+                enable_slippage=True,
+                enable_bid_ask_spread=True,
+                slippage_rate=0.08,
+                bid_ask_spread_rate=0.15,
+                ohlcv_data_1=df1,
+                ohlcv_data_2=df2,
+                recompute_frequency=16  # Пересчет коинтеграции каждые 16 часов
+            )
             
-            backtester = Backtester(series_1, series_2, lookback=60, 
-                                   entry_threshold=2.0, exit_threshold=0.5)
-            results = backtester.run_full_backtest(analyzer=analyzer)
+            try:
+                results = backtester.run_full_backtest(analyzer=analyzer)
+            except ValueError as e:
+                if "не коинтегрированы" in str(e):
+                    logger.warning(f"Пара {pair[0]}-{pair[1]} не коинтегрирована, пропуск.")
+                    continue
+                else:
+                    raise
             
             pair_name = f"{pair[0]}-{pair[1]}"
             all_results[pair_name] = results
