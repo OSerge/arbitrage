@@ -17,9 +17,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-TRADING_HOURS_PER_DAY = 16   # Торгуем 16 часов в день
-TRADING_DAYS_PER_YEAR = 252  # Среднее количество торговых дней в году
-HOURS_IN_YEAR = TRADING_HOURS_PER_DAY * TRADING_DAYS_PER_YEAR
+from core.config import TRADING_CONFIG
+
+TRADING_HOURS_PER_DAY = TRADING_CONFIG.TRADING_HOURS_PER_DAY  # Используем конфигурацию
+TRADING_DAYS_PER_YEAR = TRADING_CONFIG.TRADING_DAYS_PER_YEAR  # Среднее количество торговых дней в году
+HOURS_IN_YEAR = TRADING_CONFIG.hours_in_year
 
 futures = [
     "GKM5", # Обыкновенные акции ПАО «ГМК «Норильский никель»
@@ -102,6 +104,8 @@ class Backtester:
         
         for i in range(self.lookback, len(z_score)):
             if np.isnan(z_score[i]):
+                # Сохраняем текущую позицию при NaN
+                signals[i] = position
                 continue
                 
             if position == 0:
@@ -175,7 +179,8 @@ class Backtester:
                 # Стандартный расчет без учета slippage
                 pnl = pos_prev * ((s1[i] - s1[i-1]) - beta * (s2[i] - s2[i-1]))
 
-            notional = abs(s1[i-1]) + abs(beta * s2[i-1])
+            # Для пар-трейдинга используем максимальное значение позиции
+            notional = max(abs(s1[i-1]), abs(beta * s2[i-1]))
             if notional == 0:
                 continue
                 
@@ -186,7 +191,7 @@ class Backtester:
                 broker_cost = self.broker_commission 
                 broker_cost_with_vat = broker_cost * 1.2
                 
-                exchange_cost = notional * self.exchange_commission_rate / 100 
+                exchange_cost = notional * self.exchange_commission_rate  # exchange_commission_rate уже в долях 
                 
                 total_commission = broker_cost_with_vat + exchange_cost
                 returns[i-1] -= total_commission / notional

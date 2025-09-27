@@ -23,6 +23,7 @@ from .config import (
 )
 
 from .utils import generate_symbol_pairs, check_data_files_exist, validate_series_data, setup_logging
+from .validation import ArbitrageValidator, print_validation_results
 
 __all__ = [
     # Основные классы
@@ -40,5 +41,8 @@ __all__ = [
     'DEFAULT_FUTURES',
     
     # Утилиты
-    'generate_symbol_pairs', 'check_data_files_exist', 'validate_series_data', 'setup_logging'
+    'generate_symbol_pairs', 'check_data_files_exist', 'validate_series_data', 'setup_logging',
+    
+    # Валидация
+    'ArbitrageValidator', 'print_validation_results'
 ]
