@@ -58,6 +58,8 @@ class RuntimeReplayer:
         last_derived_account_summary: AccountSummary | None = None
         last_recorded_snapshot: PositionSnapshot | None = None
         last_recorded_account_summary: AccountSummary | None = None
+        derived_snapshots_by_instrument: dict[tuple[str, str, str], PositionSnapshot] = {}
+        recorded_snapshots_by_instrument: dict[tuple[str, str, str], PositionSnapshot] = {}
 
         for record in records:
             event = decode_event_record(record)
@@ -80,18 +82,29 @@ class RuntimeReplayer:
                     captured_at=event.occurred_at,
                     contour=ExecutionContour.REPLAY,
                 )
+                derived_snapshots_by_instrument[_position_key(event.instrument)] = last_derived_snapshot
                 continue
 
             if isinstance(event, PositionSnapshot):
                 recorded_position_snapshots.append(event)
                 last_recorded_snapshot = event
+                recorded_snapshots_by_instrument[_position_key(event.instrument)] = event
                 continue
 
             recorded_account_summaries.append(event)
             last_recorded_account_summary = event
 
-        if last_recorded_snapshot is not None and last_derived_snapshot is not None:
-            _assert_position_parity(last_recorded_snapshot, last_derived_snapshot)
+        for instrument_key, expected_snapshot in recorded_snapshots_by_instrument.items():
+            actual_snapshot = derived_snapshots_by_instrument.get(instrument_key)
+            if actual_snapshot is None:
+                actual_snapshot = ledger.build_position_snapshot(
+                    instrument=expected_snapshot.instrument,
+                    snapshot_id=self._next_session_id("replay-position-snapshot"),
+                    captured_at=expected_snapshot.captured_at,
+                    contour=ExecutionContour.REPLAY,
+                )
+            _assert_position_parity(expected_snapshot, actual_snapshot)
+
         if last_recorded_account_summary is not None and last_derived_account_summary is not None:
             _assert_account_parity(last_recorded_account_summary, last_derived_account_summary)
 
@@ -141,6 +154,14 @@ def _assert_account_parity(
         raise ValueError("Replay account parity mismatch on equity.")
     if expected.available_cash != actual.available_cash:
         raise ValueError("Replay account parity mismatch on available_cash.")
+
+
+def _position_key(instrument) -> tuple[str, str, str]:
+    return (
+        instrument.symbol,
+        instrument.exchange,
+        instrument.instrument_type.value,
+    )
 
 
 __all__ = ["ReplayResult", "RuntimeReplayer"]

@@ -14,6 +14,7 @@
 ## Индекс
 
 - `agent-operating-system.md` - общие contract conventions, authority hierarchy, envelope semantics.
+- `alor-market-data.md` - public/open `AlorAPI` market-data surfaces, payload shapes и MVP storage conventions.
 - `domain-data.md` - reference/data contracts для instrument и dataset lineage.
 - `domain-research.md` - research run и research intent contracts.
 - `domain-execution.md` - portfolio target, order/fill lifecycle, position/account snapshots.

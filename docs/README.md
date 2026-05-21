@@ -6,6 +6,7 @@
 
 - `docs/superpowers/specs/2026-05-21-agent-operated-mvp-design.md` — согласованный design spec для узкого `agent-operated` MVP: `paper-first platform + controlled Alor test/live contour`.
 - `docs/superpowers/plans/2026-05-21-agent-operated-mvp-implementation-plan.md` — детальный phased implementation plan для `agent-operated` MVP: `Agent Operating System`, domain contracts, `AlorAPI` test contour, paper/replay runtime, minimal UI read-model slice, `local-dev` и `single-host-prod-like` profiles.
+- `docs/superpowers/contracts/alor-market-data.md` — contract doc по open/public `AlorAPI` market-data surfaces: доступные HTTP endpoints, реальные payload shapes и рекомендуемый raw + normalized storage design для MVP.
 - `docs/superpowers/runbooks/alor-test-contour.md` — operational runbook по `AlorAPI` test contour: endpoints, auth lifecycle, reconnect/resubscribe discipline, limits и подготовка к первой реальной интеграционной проверке.
 - `docs/target_platform_architecture.md` — целевая архитектура всей платформы, от которой MVP сознательно отрезает лишнюю раннюю сложность.
 - `docs/platform_roadmap.md` — roadmap развития от foundation к более зрелому execution/risk контуру.

@@ -1,5 +1,9 @@
 """Minimal paper/replay runtime shell."""
 
+from statarb.runtime.historical import (
+    HistoricalPaperReplaySmokeResult,
+    run_historical_paper_replay_smoke,
+)
 from statarb.runtime.paper import (
     EventJournalEntry,
     JsonlEventSink,
@@ -21,6 +25,7 @@ from statarb.runtime.replay import (
 __all__ = [
     "EventJournalEntry",
     "EventJournalRecord",
+    "HistoricalPaperReplaySmokeResult",
     "JsonlEventSink",
     "PaperExecutionEngine",
     "PaperExecutionResult",
@@ -32,4 +37,5 @@ __all__ = [
     "decode_event_record",
     "evaluate_paper_risk_checks",
     "load_event_journal",
+    "run_historical_paper_replay_smoke",
 ]
