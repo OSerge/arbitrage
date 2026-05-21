@@ -8,12 +8,15 @@ import pandas as pd
 
 from statarb.adapters.alor.http_market_data import (
     HistoricalBarsRequest,
+    AvailableBoardsRequest,
+    normalize_available_boards_response,
     normalize_quotes_response,
     normalize_securities_response,
 )
 from statarb.data.alor_storage import (
     ingest_history_payload,
     persist_raw_alor_payload,
+    write_available_boards_dataset,
     write_quote_snapshot_dataset,
     write_security_snapshot_dataset,
 )
@@ -170,3 +173,52 @@ def test_snapshot_writers_use_typed_alor_records_and_manifest_metadata(tmp_path)
     assert quotes_manifest["dataset_kind"] == "quotes"
     assert quotes_manifest["request_params"] == {"symbols": ["MOEX:SBER"]}
     assert quotes_manifest["min_event_time_utc"] == datetime.fromtimestamp(quote_time, tz=UTC).isoformat()
+
+
+def test_available_boards_writer_persists_board_snapshot_and_manifest(tmp_path) -> None:
+    observed_at = datetime(2026, 5, 21, 12, 0, tzinfo=UTC)
+    request = AvailableBoardsRequest(exchange="MOEX", symbol="SBER")
+    available_boards_payload = [
+        {
+            "board": "TQBR",
+            "primaryBoard": "TQBR",
+            "instrumentGroup": "TQBR",
+            "market": "FOND",
+            "isPrimary": True,
+        },
+        {
+            "board": "SMAL",
+            "primaryBoard": "TQBR",
+        },
+    ]
+
+    raw_artifact = persist_raw_alor_payload(
+        storage_root=tmp_path,
+        relative_uri=(
+            "data/raw/vendor=alor/dataset=available_boards/load_date=2026-05-21/request_id=boards-001/response.json.gz"
+        ),
+        payload=available_boards_payload,
+    )
+    batch = write_available_boards_dataset(
+        storage_root=tmp_path,
+        records=normalize_available_boards_response(available_boards_payload, request=request),
+        observed_at_utc=observed_at,
+        request_id="boards-001",
+        raw_storage_uri=raw_artifact.storage_uri,
+        request_params={"exchange": "MOEX", "symbol": "SBER"},
+    )
+
+    frame = pd.read_parquet(batch.normalized_artifact.path)
+    assert frame.loc[0, "symbol"] == "SBER"
+    assert frame.loc[0, "board"] == "TQBR"
+    assert frame.loc[0, "instrument_group"] == "TQBR"
+    assert bool(frame.loc[0, "is_primary"]) is True
+    assert frame.loc[1, "primary_board"] == "TQBR"
+
+    manifest_payload = json.loads(batch.manifest_path.read_text(encoding="utf-8"))
+    assert manifest_payload["dataset_kind"] == "available_boards"
+    assert manifest_payload["response_format"] == "N/A"
+    assert manifest_payload["request_params"] == {"exchange": "MOEX", "symbol": "SBER"}
+    assert batch.normalized_artifact.storage_uri.endswith(
+        "/dataset=available_boards/as_of_date=2026-05-21/exchange=MOEX/request_id=boards-001/part-00000.parquet"
+    )

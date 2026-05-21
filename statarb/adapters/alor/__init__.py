@@ -19,6 +19,7 @@ from statarb.adapters.alor.endpoints import (
     get_endpoint_catalog,
 )
 from statarb.adapters.alor.http_market_data import (
+    AlorAvailableBoardSnapshot,
     AlorHistoryBar,
     AlorObjectFormat,
     AlorQuoteSnapshot,
@@ -29,6 +30,7 @@ from statarb.adapters.alor.http_market_data import (
     QuotesSnapshotRequest,
     RecommendedStorageLayout,
     SecuritiesCatalogRequest,
+    normalize_available_boards_response,
     normalize_history_response,
     normalize_quotes_response,
     normalize_securities_response,
@@ -67,6 +69,7 @@ from statarb.adapters.alor.ws_portfolio import (
 __all__ = [
     "AccessToken",
     "AlorAuthConfig",
+    "AlorAvailableBoardSnapshot",
     "AlorHistoryBar",
     "AlorObjectFormat",
     "AlorEndpointCatalog",
@@ -107,6 +110,7 @@ __all__ = [
     "TradesSubscription",
     "WsRequestEnvelope",
     "get_endpoint_catalog",
+    "normalize_available_boards_response",
     "normalize_history_response",
     "normalize_quotes_response",
     "normalize_securities_response",

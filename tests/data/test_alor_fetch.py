@@ -8,9 +8,19 @@ from datetime import UTC, datetime
 
 import pytest
 
-from statarb.adapters.alor.http_market_data import HistoricalBarsRequest
+from statarb.adapters.alor.http_market_data import (
+    AvailableBoardsRequest,
+    HistoricalBarsRequest,
+    normalize_available_boards_response,
+    normalize_securities_response,
+)
 from statarb.config import AlorContour
 from statarb.data.alor_fetch import AlorHttpResponse, fetch_public_history, main
+from statarb.data.alor_storage import (
+    persist_raw_alor_payload,
+    write_available_boards_dataset,
+    write_security_snapshot_dataset,
+)
 
 
 class StubHttpClient:
@@ -138,6 +148,127 @@ def test_main_history_command_prints_dataset_summary(tmp_path, capsys) -> None:
     assert summary["row_count"] == 1
     assert summary["storage_uri"].endswith("/request_id=cli-001/part-00000.parquet")
     assert summary["raw_storage_uri"].endswith("/request_id=cli-001/response.json.gz")
+
+
+def test_main_securities_command_prints_dataset_summary(tmp_path, capsys) -> None:
+    client = StubHttpClient(
+        [
+            {
+                "symbol": "SBER",
+                "exchange": "MOEX",
+                "market": "FOND",
+                "board": "TQBR",
+                "primaryBoard": "TQBR",
+                "type": "Stock",
+                "shortName": "Sberbank",
+            }
+        ]
+    )
+
+    exit_code = main(
+        [
+            "securities",
+            "--query",
+            "SBER",
+            "--exchange",
+            "MOEX",
+            "--storage-root",
+            str(tmp_path),
+            "--request-id",
+            "securities-cli-001",
+            "--contour",
+            "live",
+        ],
+        http_client=client,
+    )
+
+    assert exit_code == 0
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["dataset_id"] == "alor-instruments-securities-cli-001"
+    assert summary["row_count"] == 1
+    assert summary["symbol_count"] == 1
+    assert summary["storage_uri"].endswith("/request_id=securities-cli-001/part-00000.parquet")
+
+
+def test_main_resolve_symbol_command_prints_preferred_board(tmp_path, capsys) -> None:
+    observed_at = datetime(2026, 5, 21, 12, 0, tzinfo=UTC)
+    securities_payload = [
+        {
+            "symbol": "SBER",
+            "exchange": "MOEX",
+            "market": "FOND",
+            "board": "SMAL",
+            "primaryBoard": "TQBR",
+            "type": "Stock",
+            "shortName": "Sberbank",
+        }
+    ]
+    available_boards_payload = [
+        {
+            "board": "TQBR",
+            "primaryBoard": "TQBR",
+            "instrumentGroup": "TQBR",
+            "isPrimary": True,
+        },
+        {
+            "board": "SMAL",
+            "primaryBoard": "TQBR",
+        },
+    ]
+
+    securities_raw = persist_raw_alor_payload(
+        storage_root=tmp_path,
+        relative_uri=(
+            "data/raw/vendor=alor/dataset=instruments/load_date=2026-05-21/request_id=resolve-securities/response.json.gz"
+        ),
+        payload=securities_payload,
+    )
+    write_security_snapshot_dataset(
+        storage_root=tmp_path,
+        records=normalize_securities_response(securities_payload),
+        observed_at_utc=observed_at,
+        request_id="resolve-securities",
+        raw_storage_uri=securities_raw.storage_uri,
+        request_params={"query": "SBER", "exchange": "MOEX"},
+    )
+
+    boards_raw = persist_raw_alor_payload(
+        storage_root=tmp_path,
+        relative_uri=(
+            "data/raw/vendor=alor/dataset=available_boards/load_date=2026-05-21/request_id=resolve-boards/response.json.gz"
+        ),
+        payload=available_boards_payload,
+    )
+    write_available_boards_dataset(
+        storage_root=tmp_path,
+        records=normalize_available_boards_response(
+            available_boards_payload,
+            request=AvailableBoardsRequest(exchange="MOEX", symbol="SBER"),
+        ),
+        observed_at_utc=observed_at,
+        request_id="resolve-boards",
+        raw_storage_uri=boards_raw.storage_uri,
+        request_params={"exchange": "MOEX", "symbol": "SBER"},
+    )
+
+    exit_code = main(
+        [
+            "resolve-symbol",
+            "--storage-root",
+            str(tmp_path),
+            "--symbol",
+            "SBER",
+            "--exchange",
+            "MOEX",
+        ]
+    )
+
+    assert exit_code == 0
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["symbol"] == "SBER"
+    assert summary["preferred_board"] == "TQBR"
+    assert summary["preferred_instrument_group"] == "TQBR"
+    assert sorted(summary["available_boards"]) == ["SMAL", "TQBR"]
 
 
 def test_importing_statarb_data_does_not_preload_cli_module() -> None:

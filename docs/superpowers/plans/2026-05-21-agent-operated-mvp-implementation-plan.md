@@ -24,12 +24,14 @@
 - `48a424d` - bootstrap от normalized `Parquet` датасетов `Alor`.
 - `5c6d031` - public fetch-runner для открытого `AlorAPI`.
 - `0e52ef2` - dataset discovery и pair bootstrap для датасетов `Alor`.
+- `b3d5f15` - safe read-only slice для `Alor` test contour и синхронизация handoff в плане.
 
 ### Что уже сделано по сути
 
 - governance foundation и `Agent Operating System` базового уровня;
 - executable domain contracts в docs и коде;
 - `Alor` public history path: fetch -> raw -> normalized `Parquet` -> manifest;
+- public reference/enrichment path: `Securities`, `availableBoards`, local symbol/board resolver;
 - manifest-driven discovery и pair bootstrap runner;
 - deterministic `paper/replay` runtime и historical smoke path;
 - canonical bootstrap path от normalized `Alor` dataset с сохранением legacy fallback;
@@ -40,7 +42,7 @@
 Ближайший рекомендованный следующий шаг:
 
 1. вручную прогнать `Alor` test contour read-only smoke через `.env`;
-2. после успешной проверки начать `Securities/availableBoards enrichment`, чтобы стабилизировать `symbol + board + instrument_group` semantics;
+2. связать `Securities/availableBoards enrichment` с `fetch/bootstrap` flow, чтобы `instrument_group` и `board` выбирались не вручную, а из локального `Alor`-ориентированного reference slice;
 3. затем перейти к более полному adapter mapping из test contour payloads в canonical contracts и к первым read-model/operator workflows.
 
 ### Правило handoff
@@ -543,7 +545,7 @@
 ## 11. Порядок handoff в следующую сессию
 
 - `Phase 1`, `Phase 2`, существенная часть `Phase 3`, `Phase 4` и config-basis `Phase 6` уже выполнены.
-- Начинать не с переосмысления foundation, а с ближайшего открытого шага: `Alor test contour read-only smoke` и затем `Securities/availableBoards enrichment`.
+- Начинать не с переосмысления foundation, а с ближайшего открытого шага: ручной `Alor test contour read-only smoke`, затем `enrichment-aware fetch/bootstrap helper`.
 - Не перескакивать сразу к `UI` или `live`.
 - После каждого phase gate делать review against this plan и contracts.
 - Любой новый domain object сначала добавлять в contracts/docs, потом в код.

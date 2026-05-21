@@ -253,6 +253,17 @@ class AlorSecuritySnapshot:
 
 
 @dataclass(frozen=True, slots=True)
+class AlorAvailableBoardSnapshot:
+    symbol: str
+    exchange: str
+    board: str
+    instrument_group: str | None
+    primary_board: str | None
+    market: str | None
+    is_primary: bool | None
+
+
+@dataclass(frozen=True, slots=True)
 class AlorQuoteSnapshot:
     symbol: str
     exchange: str
@@ -323,6 +334,60 @@ def normalize_securities_response(
         )
         for item in (_as_mapping(entry, field_name="security entry") for entry in rows)
     )
+
+
+def normalize_available_boards_response(
+    payload: Sequence[Mapping[str, Any] | str] | Mapping[str, Any],
+    *,
+    request: AvailableBoardsRequest,
+) -> tuple[AlorAvailableBoardSnapshot, ...]:
+    rows = _as_available_boards_sequence(payload)
+    normalized_rows: list[AlorAvailableBoardSnapshot] = []
+    for entry in rows:
+        if isinstance(entry, str):
+            board = entry.strip()
+            if not board:
+                raise ValueError("Available boards payload cannot contain empty board names.")
+            normalized_rows.append(
+                AlorAvailableBoardSnapshot(
+                    symbol=request.symbol,
+                    exchange=request.exchange,
+                    board=board,
+                    instrument_group=board,
+                    primary_board=None,
+                    market=None,
+                    is_primary=None,
+                )
+            )
+            continue
+
+        item = _as_mapping(entry, field_name="available board entry")
+        board = str(_required_value(item, "board", "boardCode", "board_code", "code", "value", "id"))
+        primary_board = _optional_text(item, "primaryBoard", "primary_board")
+        is_primary = _optional_bool(item, "isPrimary", "is_primary", "primary")
+        if is_primary is None and primary_board is not None:
+            is_primary = primary_board == board
+        normalized_rows.append(
+            AlorAvailableBoardSnapshot(
+                symbol=_optional_text(item, "symbol", "sym") or request.symbol,
+                exchange=_optional_text(item, "exchange", "ex") or request.exchange,
+                board=board,
+                instrument_group=(
+                    _optional_text(
+                        item,
+                        "instrumentGroup",
+                        "instrument_group",
+                        "boardGroup",
+                        "board_group",
+                    )
+                    or board
+                ),
+                primary_board=primary_board,
+                market=_optional_text(item, "market"),
+                is_primary=is_primary,
+            )
+        )
+    return tuple(normalized_rows)
 
 
 def normalize_quotes_response(
@@ -407,6 +472,15 @@ def _as_sequence(value: Any, *, field_name: str) -> Sequence[Any]:
     raise ValueError(f"{field_name} must be a sequence.")
 
 
+def _as_available_boards_sequence(value: Any) -> Sequence[Any]:
+    if isinstance(value, Mapping):
+        for candidate in ("availableBoards", "available_boards", "boards", "items"):
+            nested = value.get(candidate)
+            if nested is not None:
+                return _as_sequence(nested, field_name="available boards payload")
+    return _as_sequence(value, field_name="available boards payload")
+
+
 def _required_value(payload: Mapping[str, Any], *candidates: str) -> Any:
     for candidate in candidates:
         value = payload.get(candidate)
@@ -439,6 +513,15 @@ def _optional_int(payload: Mapping[str, Any], *candidates: str) -> int | None:
     raise ValueError(f"Expected integer value for one of: {', '.join(candidates)}.")
 
 
+def _optional_bool(payload: Mapping[str, Any], *candidates: str) -> bool | None:
+    value = _first_present_value(payload, *candidates)
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    raise ValueError(f"Expected boolean value for one of: {', '.join(candidates)}.")
+
+
 def _numeric_value(payload: Mapping[str, Any], *candidates: str) -> int | float:
     value = _required_value(payload, *candidates)
     if isinstance(value, (int, float)):
@@ -454,6 +537,7 @@ def _first_present_value(payload: Mapping[str, Any], *candidates: str) -> Any | 
 
 
 __all__ = [
+    "AlorAvailableBoardSnapshot",
     "AlorHistoryBar",
     "AlorObjectFormat",
     "AlorQuoteSnapshot",
@@ -468,6 +552,7 @@ __all__ = [
     "RAW_RESPONSE_FILENAME",
     "RecommendedStorageLayout",
     "SecuritiesCatalogRequest",
+    "normalize_available_boards_response",
     "normalize_history_response",
     "normalize_quotes_response",
     "normalize_securities_response",

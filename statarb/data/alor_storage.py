@@ -14,19 +14,24 @@ import pandas as pd
 
 from statarb.adapters.alor.http_market_data import (
     RAW_RESPONSE_FILENAME,
+    AlorAvailableBoardSnapshot,
     AlorHistoryBar,
     AlorObjectFormat,
     AlorQuoteSnapshot,
     AlorSecuritySnapshot,
+    AvailableBoardsRequest,
     HistoricalBarsRequest,
     RecommendedStorageLayout,
+    normalize_available_boards_response,
     normalize_history_response,
+    normalize_securities_response,
     recommended_history_storage_layout,
     recommended_snapshot_storage_layout,
 )
 
 PARQUET_PART_FILENAME = "part-00000.parquet"
 ALOR_MARKET_DATA_CONTRACT_VERSION = "2026-05-21"
+NOT_APPLICABLE_RESPONSE_FORMAT = "N/A"
 
 
 @dataclass(frozen=True, slots=True)
@@ -222,6 +227,60 @@ def write_security_snapshot_dataset(
     )
 
 
+def write_available_boards_dataset(
+    *,
+    storage_root: Path,
+    records: Sequence[AlorAvailableBoardSnapshot],
+    observed_at_utc: datetime,
+    request_id: str | None = None,
+    raw_storage_uri: str,
+    request_params: Mapping[str, Any],
+    authorized: bool = False,
+    data_delay_minutes: int | None = 15,
+) -> StoredDatasetBatch:
+    dataset_request_id = request_id or uuid4().hex
+    exchange = records[0].exchange if records else _optional_text(request_params.get("exchange"))
+    layout = recommended_snapshot_storage_layout(
+        dataset="available_boards",
+        observed_at_utc=observed_at_utc,
+        exchange=exchange,
+    )
+    rows = [
+        {
+            "source": "alor",
+            "endpoint": "md/v2/Securities/{exchange}/{symbol}/availableBoards",
+            "authorized": authorized,
+            "data_delay_minutes": data_delay_minutes,
+            "response_format": NOT_APPLICABLE_RESPONSE_FORMAT,
+            "fetched_at_utc": observed_at_utc.astimezone(UTC),
+            "exchange": row.exchange,
+            "symbol": row.symbol,
+            "board": row.board,
+            "instrument_group": row.instrument_group,
+            "primary_board": row.primary_board,
+            "market": row.market,
+            "is_primary": row.is_primary,
+        }
+        for row in records
+    ]
+    event_times = [observed_at_utc.astimezone(UTC)] * len(rows)
+    return _write_dataset_batch(
+        storage_root=storage_root,
+        layout=layout,
+        request_id=dataset_request_id,
+        dataset_kind="available_boards",
+        endpoint="md/v2/Securities/{exchange}/{symbol}/availableBoards",
+        rows=rows,
+        raw_storage_uri=raw_storage_uri,
+        request_params=_json_ready(dict(request_params)),
+        authorized=authorized,
+        data_delay_minutes=data_delay_minutes,
+        response_format=NOT_APPLICABLE_RESPONSE_FORMAT,
+        created_at_utc=observed_at_utc,
+        event_times=event_times,
+    )
+
+
 def write_quote_snapshot_dataset(
     *,
     storage_root: Path,
@@ -320,6 +379,76 @@ def ingest_history_payload(
         authorized=authorized,
         data_delay_minutes=data_delay_minutes,
         response_format=response_format,
+    )
+
+
+def ingest_security_payload(
+    *,
+    storage_root: Path,
+    payload: Sequence[Mapping[str, Any]] | Mapping[str, Any],
+    fetched_at_utc: datetime,
+    request_params: Mapping[str, Any],
+    request_id: str | None = None,
+    authorized: bool = False,
+    data_delay_minutes: int | None = 15,
+    response_format: AlorObjectFormat | str | None = None,
+) -> StoredDatasetBatch:
+    dataset_request_id = request_id or uuid4().hex
+    layout = recommended_snapshot_storage_layout(
+        dataset="instruments",
+        observed_at_utc=fetched_at_utc,
+        exchange=_optional_text(request_params.get("exchange")),
+    )
+    raw_artifact = persist_raw_alor_payload(
+        storage_root=storage_root,
+        relative_uri=_raw_storage_uri(layout=layout, request_id=dataset_request_id),
+        payload=payload,
+    )
+    records = normalize_securities_response(payload)
+    return write_security_snapshot_dataset(
+        storage_root=storage_root,
+        records=records,
+        observed_at_utc=fetched_at_utc,
+        request_id=dataset_request_id,
+        raw_storage_uri=raw_artifact.storage_uri,
+        request_params=request_params,
+        authorized=authorized,
+        data_delay_minutes=data_delay_minutes,
+        response_format=response_format,
+    )
+
+
+def ingest_available_boards_payload(
+    *,
+    storage_root: Path,
+    request: AvailableBoardsRequest,
+    payload: Sequence[Mapping[str, Any] | str] | Mapping[str, Any],
+    fetched_at_utc: datetime,
+    request_id: str | None = None,
+    authorized: bool = False,
+    data_delay_minutes: int | None = 15,
+) -> StoredDatasetBatch:
+    dataset_request_id = request_id or uuid4().hex
+    layout = recommended_snapshot_storage_layout(
+        dataset="available_boards",
+        observed_at_utc=fetched_at_utc,
+        exchange=request.exchange,
+    )
+    raw_artifact = persist_raw_alor_payload(
+        storage_root=storage_root,
+        relative_uri=_raw_storage_uri(layout=layout, request_id=dataset_request_id),
+        payload=payload,
+    )
+    records = normalize_available_boards_response(payload, request=request)
+    return write_available_boards_dataset(
+        storage_root=storage_root,
+        records=records,
+        observed_at_utc=fetched_at_utc,
+        request_id=dataset_request_id,
+        raw_storage_uri=raw_artifact.storage_uri,
+        request_params={"exchange": request.exchange, "symbol": request.symbol},
+        authorized=authorized,
+        data_delay_minutes=data_delay_minutes,
     )
 
 
@@ -436,11 +565,15 @@ def _optional_text(value: Any) -> str | None:
 __all__ = [
     "ALOR_MARKET_DATA_CONTRACT_VERSION",
     "AlorDatasetManifest",
+    "NOT_APPLICABLE_RESPONSE_FORMAT",
     "PARQUET_PART_FILENAME",
     "StoredArtifact",
     "StoredDatasetBatch",
+    "ingest_available_boards_payload",
     "ingest_history_payload",
+    "ingest_security_payload",
     "persist_raw_alor_payload",
+    "write_available_boards_dataset",
     "write_history_bars_dataset",
     "write_quote_snapshot_dataset",
     "write_security_snapshot_dataset",

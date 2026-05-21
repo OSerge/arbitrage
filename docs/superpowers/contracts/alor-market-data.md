@@ -203,6 +203,40 @@
 - публичный `/md/v2/Securities` - более полезный стартовый symbol-master source, чем auth-only `/{exchange}/{symbol}`;
 - `includeNonBaseBoards=true` полезен для полного snapshot-а board variants, но без него можно потерять часть торговых режимов.
 
+## Contract: Available boards snapshot
+
+### Official response shape
+
+`GET /md/v2/Securities/{exchange}/{symbol}/availableBoards` возвращает public list of boards for a concrete instrument. Для MVP этот endpoint нужен как enrichment source, потому что:
+
+- `board` не всегда надежно восстанавливается из history/quotes alone;
+- `primary_board` и preferred request `instrumentGroup` нужно стабилизировать на уровне symbol lookup;
+- snapshot можно хранить отдельно от broad `Securities` catalog без построения тяжелого symbol-master service.
+
+### Primary MVP fields
+
+Нормализованный available-boards snapshot должен хранить:
+
+- `source = "alor"`
+- `endpoint = "md/v2/Securities/{exchange}/{symbol}/availableBoards"`
+- `authorized`
+- `data_delay_minutes`
+- `response_format = "N/A"` для manifest, потому что endpoint не использует `format`
+- `fetched_at_utc`
+- `exchange`
+- `symbol`
+- `board`
+- `instrument_group`
+- `primary_board`
+- `market`
+- `is_primary`
+
+### Caveats
+
+- если vendor payload не отдает явный `instrumentGroup`, в MVP допустим fallback `instrument_group = board`;
+- `availableBoards` - это enrichment layer, а не replacement для instrument snapshot;
+- preferred board должен определяться совместно по `availableBoards` и latest instrument snapshot, а не по одной quote/history записи.
+
 ## Contract: Quote snapshot
 
 ### Official response shape
@@ -294,6 +328,7 @@ Raw layer должна хранить exact response body и request envelope:
 ```text
 data/raw/vendor=alor/dataset=bars/load_date=YYYY-MM-DD/request_id=<id>/response.json.gz
 data/raw/vendor=alor/dataset=instruments/load_date=YYYY-MM-DD/request_id=<id>/response.json.gz
+data/raw/vendor=alor/dataset=available_boards/load_date=YYYY-MM-DD/request_id=<id>/response.json.gz
 data/raw/vendor=alor/dataset=quotes/load_date=YYYY-MM-DD/request_id=<id>/response.json.gz
 ```
 
@@ -317,6 +352,7 @@ data/raw/vendor=alor/dataset=quotes/load_date=YYYY-MM-DD/request_id=<id>/respons
 ```text
 data/normalized/vendor=alor/dataset=bars/exchange=MOEX/timeframe=60/date=YYYY-MM-DD/part-*.parquet
 data/normalized/vendor=alor/dataset=instruments/as_of_date=YYYY-MM-DD/exchange=MOEX/part-*.parquet
+data/normalized/vendor=alor/dataset=available_boards/as_of_date=YYYY-MM-DD/exchange=MOEX/part-*.parquet
 data/normalized/vendor=alor/dataset=quotes/as_of_date=YYYY-MM-DD/exchange=MOEX/part-*.parquet
 ```
 

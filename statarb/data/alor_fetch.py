@@ -5,18 +5,28 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Mapping, Protocol
+from typing import Any, Mapping, Protocol, Sequence
 
 import requests
 
 from statarb.adapters.alor.http_market_data import (
     AlorObjectFormat,
+    AvailableBoardsRequest,
     HistoricalBarsRequest,
     HttpRequestShape,
+    SecuritiesCatalogRequest,
+    normalize_available_boards_response,
+    normalize_securities_response,
 )
 from statarb.config import AlorContour
 from statarb.data.alor_discovery import discover_history_dataset_manifests, find_latest_history_dataset_manifest
-from statarb.data.alor_storage import StoredDatasetBatch, ingest_history_payload
+from statarb.data.alor_reference import resolve_symbol_board_enrichment
+from statarb.data.alor_storage import (
+    StoredDatasetBatch,
+    ingest_available_boards_payload,
+    ingest_history_payload,
+    ingest_security_payload,
+)
 from statarb.domain import InstrumentType
 from statarb.runtime.alor_pair_bootstrap import run_alor_pair_bootstrap
 
@@ -65,6 +75,26 @@ class PublicHistoryFetchResult:
     batch: StoredDatasetBatch
 
 
+@dataclass(frozen=True, slots=True)
+class PublicSecuritiesFetchResult:
+    request: SecuritiesCatalogRequest
+    http_request: HttpRequestShape
+    http_status_code: int
+    fetched_at_utc: datetime
+    batch: StoredDatasetBatch
+    symbol_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class PublicAvailableBoardsFetchResult:
+    request: AvailableBoardsRequest
+    http_request: HttpRequestShape
+    http_status_code: int
+    fetched_at_utc: datetime
+    batch: StoredDatasetBatch
+    available_boards: tuple[str, ...]
+
+
 def fetch_public_history(
     *,
     storage_root: Path,
@@ -98,6 +128,84 @@ def fetch_public_history(
         http_status_code=response.status_code,
         fetched_at_utc=observed_at,
         batch=batch,
+    )
+
+
+def fetch_public_securities(
+    *,
+    storage_root: Path,
+    request: SecuritiesCatalogRequest,
+    contour: AlorContour | str = AlorContour.LIVE,
+    http_client: AlorHttpClient | None = None,
+    fetched_at_utc: datetime | None = None,
+    request_id: str | None = None,
+    timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+) -> PublicSecuritiesFetchResult:
+    http_request = request.to_http_request(contour=contour, access_token=None)
+    response = (http_client or RequestsAlorHttpClient()).execute(
+        http_request,
+        timeout_seconds=timeout_seconds,
+    )
+    payload = _sequence_or_mapping_payload(response.payload, endpoint_name="public Alor securities")
+    observed_at = _coerce_utc_datetime(fetched_at_utc or datetime.now(tz=UTC))
+    batch = ingest_security_payload(
+        storage_root=Path(storage_root),
+        payload=payload,
+        fetched_at_utc=observed_at,
+        request_params=http_request.params,
+        request_id=request_id,
+        authorized=False,
+        data_delay_minutes=DEFAULT_PUBLIC_DATA_DELAY_MINUTES,
+        response_format=request.format,
+    )
+    records = normalize_securities_response(payload)
+    return PublicSecuritiesFetchResult(
+        request=request,
+        http_request=http_request,
+        http_status_code=response.status_code,
+        fetched_at_utc=observed_at,
+        batch=batch,
+        symbol_count=len({record.symbol for record in records}),
+    )
+
+
+def fetch_public_available_boards(
+    *,
+    storage_root: Path,
+    request: AvailableBoardsRequest,
+    contour: AlorContour | str = AlorContour.LIVE,
+    http_client: AlorHttpClient | None = None,
+    fetched_at_utc: datetime | None = None,
+    request_id: str | None = None,
+    timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+) -> PublicAvailableBoardsFetchResult:
+    http_request = request.to_http_request(contour=contour, access_token=None)
+    response = (http_client or RequestsAlorHttpClient()).execute(
+        http_request,
+        timeout_seconds=timeout_seconds,
+    )
+    payload = _sequence_or_mapping_payload(
+        response.payload,
+        endpoint_name="public Alor available boards",
+    )
+    observed_at = _coerce_utc_datetime(fetched_at_utc or datetime.now(tz=UTC))
+    batch = ingest_available_boards_payload(
+        storage_root=Path(storage_root),
+        request=request,
+        payload=payload,
+        fetched_at_utc=observed_at,
+        request_id=request_id,
+        authorized=False,
+        data_delay_minutes=DEFAULT_PUBLIC_DATA_DELAY_MINUTES,
+    )
+    records = normalize_available_boards_response(payload, request=request)
+    return PublicAvailableBoardsFetchResult(
+        request=request,
+        http_request=http_request,
+        http_status_code=response.status_code,
+        fetched_at_utc=observed_at,
+        batch=batch,
+        available_boards=tuple(record.board for record in records),
     )
 
 
@@ -135,6 +243,67 @@ def main(argv: list[str] | None = None, *, http_client: AlorHttpClient | None = 
                 "storage_uri": result.batch.normalized_artifact.storage_uri,
                 "symbol": request.symbol,
                 "timeframe": request.tf,
+            }
+        )
+        return 0
+    if args.command == "securities":
+        request = SecuritiesCatalogRequest(
+            query=_optional_cli_text(args.query),
+            limit=args.limit,
+            offset=args.offset,
+            sector=_optional_cli_text(args.sector),
+            cfi_code=_optional_cli_text(args.cfi_code),
+            exchange=_optional_cli_text(args.exchange),
+            instrument_group=_optional_cli_text(args.instrument_group),
+            include_non_base_boards=args.include_non_base_boards,
+            format=AlorObjectFormat.coerce(args.object_format),
+        )
+        result = fetch_public_securities(
+            storage_root=Path(args.storage_root),
+            request=request,
+            contour=args.contour,
+            http_client=http_client,
+            request_id=args.request_id,
+            timeout_seconds=args.timeout_seconds,
+        )
+        _print_summary(
+            {
+                "contour": AlorContour.coerce(args.contour).value,
+                "dataset_id": result.batch.manifest.dataset_id,
+                "exchange": _optional_cli_text(args.exchange),
+                "manifest_uri": result.batch.manifest_uri,
+                "query": _optional_cli_text(args.query),
+                "raw_storage_uri": result.batch.raw_artifact.storage_uri,
+                "row_count": result.batch.manifest.row_count,
+                "storage_uri": result.batch.normalized_artifact.storage_uri,
+                "symbol_count": result.symbol_count,
+            }
+        )
+        return 0
+    if args.command == "available-boards":
+        request = AvailableBoardsRequest(
+            exchange=args.exchange,
+            symbol=args.symbol,
+        )
+        result = fetch_public_available_boards(
+            storage_root=Path(args.storage_root),
+            request=request,
+            contour=args.contour,
+            http_client=http_client,
+            request_id=args.request_id,
+            timeout_seconds=args.timeout_seconds,
+        )
+        _print_summary(
+            {
+                "contour": AlorContour.coerce(args.contour).value,
+                "dataset_id": result.batch.manifest.dataset_id,
+                "exchange": request.exchange,
+                "manifest_uri": result.batch.manifest_uri,
+                "available_boards": list(result.available_boards),
+                "raw_storage_uri": result.batch.raw_artifact.storage_uri,
+                "row_count": result.batch.manifest.row_count,
+                "storage_uri": result.batch.normalized_artifact.storage_uri,
+                "symbol": request.symbol,
             }
         )
         return 0
@@ -180,6 +349,19 @@ def main(argv: list[str] | None = None, *, http_client: AlorHttpClient | None = 
         )
         _print_summary(result.to_dict())
         return 0
+    if args.command == "resolve-symbol":
+        resolution = resolve_symbol_board_enrichment(
+            storage_root=Path(args.storage_root),
+            symbol=args.symbol,
+            exchange=args.exchange,
+        )
+        if resolution is None:
+            raise FileNotFoundError(
+                "No local Alor enrichment snapshots found for "
+                f"symbol={args.symbol!r}, exchange={args.exchange!r}."
+            )
+        _print_summary(resolution.to_dict())
+        return 0
 
     parser.error(f"Unsupported command: {args.command!r}")
     return 0
@@ -188,7 +370,7 @@ def main(argv: list[str] | None = None, *, http_client: AlorHttpClient | None = 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m statarb.data.alor_fetch",
-        description="Fetch, discover, and bootstrap local Alor history datasets for the MVP.",
+        description="Fetch, discover, enrich, and bootstrap local Alor datasets for the MVP.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     history = subparsers.add_parser("history", help="Fetch historical bars from public Alor HTTP API.")
@@ -214,6 +396,47 @@ def _build_parser() -> argparse.ArgumentParser:
     history.add_argument("--request-id")
     history.add_argument("--storage-root", default=str(_project_root()))
     history.add_argument("--timeout-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS)
+
+    securities = subparsers.add_parser(
+        "securities",
+        help="Fetch public Alor securities catalog snapshot and persist normalized artifacts.",
+    )
+    securities.add_argument("--query")
+    securities.add_argument("--limit", type=int, default=25)
+    securities.add_argument("--offset", type=int, default=0)
+    securities.add_argument("--sector")
+    securities.add_argument("--cfi-code")
+    securities.add_argument("--exchange")
+    securities.add_argument("--instrument-group")
+    securities.add_argument("--include-non-base-boards", action="store_true")
+    securities.add_argument(
+        "--object-format",
+        default=AlorObjectFormat.HEAVY.value,
+        choices=[member.value for member in AlorObjectFormat],
+    )
+    securities.add_argument(
+        "--contour",
+        default=AlorContour.LIVE.value,
+        choices=[member.value for member in AlorContour],
+    )
+    securities.add_argument("--request-id")
+    securities.add_argument("--storage-root", default=str(_project_root()))
+    securities.add_argument("--timeout-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS)
+
+    available_boards = subparsers.add_parser(
+        "available-boards",
+        help="Fetch public Alor availableBoards snapshot for a symbol and persist normalized artifacts.",
+    )
+    available_boards.add_argument("--symbol", required=True)
+    available_boards.add_argument("--exchange", default="MOEX")
+    available_boards.add_argument(
+        "--contour",
+        default=AlorContour.LIVE.value,
+        choices=[member.value for member in AlorContour],
+    )
+    available_boards.add_argument("--request-id")
+    available_boards.add_argument("--storage-root", default=str(_project_root()))
+    available_boards.add_argument("--timeout-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS)
 
     discover = subparsers.add_parser(
         "discover",
@@ -255,6 +478,14 @@ def _build_parser() -> argparse.ArgumentParser:
     pair_bootstrap.add_argument("--journal-path")
     pair_bootstrap.add_argument("--skip-smoke", action="store_true")
     pair_bootstrap.add_argument("--storage-root", default=str(_project_root()))
+
+    resolve_symbol = subparsers.add_parser(
+        "resolve-symbol",
+        help="Resolve preferred board and available boards from local Alor reference snapshots.",
+    )
+    resolve_symbol.add_argument("--symbol", required=True)
+    resolve_symbol.add_argument("--exchange", default="MOEX")
+    resolve_symbol.add_argument("--storage-root", default=str(_project_root()))
     return parser
 
 
@@ -292,6 +523,20 @@ def _mapping_payload(payload: Any) -> Mapping[str, Any]:
     if isinstance(payload, Mapping):
         return payload
     raise ValueError("Public Alor history fetch expected a JSON object payload.")
+
+
+def _sequence_or_mapping_payload(
+    payload: Any,
+    *,
+    endpoint_name: str,
+) -> Sequence[Mapping[str, Any] | str] | Mapping[str, Any]:
+    if isinstance(payload, Mapping):
+        return payload
+    if isinstance(payload, (str, bytes, bytearray)):
+        raise ValueError(f"{endpoint_name} expected a JSON array or object payload.")
+    if isinstance(payload, Sequence):
+        return payload
+    raise ValueError(f"{endpoint_name} expected a JSON array or object payload.")
 
 
 def _coerce_utc_datetime(value: datetime) -> datetime:

@@ -3,9 +3,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from statarb.adapters.alor.http_market_data import (
+    AvailableBoardsRequest,
     HistoricalBarsRequest,
     QuotesSnapshotRequest,
     SecuritiesCatalogRequest,
+    normalize_available_boards_response,
     normalize_history_response,
     normalize_quotes_response,
     normalize_securities_response,
@@ -49,6 +51,44 @@ def test_public_quotes_request_builds_symbol_pairs_path() -> None:
     )
     assert http_request.headers == {"Accept": "application/json"}
     assert http_request.params == {"format": "Heavy"}
+
+
+def test_available_boards_request_and_normalization_use_symbol_context() -> None:
+    request = AvailableBoardsRequest(exchange="MOEX", symbol="SBER")
+
+    http_request = request.to_http_request(contour=AlorContour.TEST)
+    rows = normalize_available_boards_response(
+        [
+            {
+                "board": "TQBR",
+                "primaryBoard": "TQBR",
+                "instrumentGroup": "TQBR",
+                "market": "FOND",
+                "isPrimary": True,
+            },
+            {
+                "boardCode": "SMAL",
+                "primary_board": "TQBR",
+                "boardGroup": "SMAL",
+            },
+        ],
+        request=request,
+    )
+
+    assert http_request.url == "https://apidev.alor.ru/md/v2/Securities/MOEX/SBER/availableBoards"
+    assert http_request.headers == {"Accept": "application/json"}
+    assert http_request.params == {}
+
+    assert rows[0].exchange == "MOEX"
+    assert rows[0].symbol == "SBER"
+    assert rows[0].board == "TQBR"
+    assert rows[0].instrument_group == "TQBR"
+    assert rows[0].primary_board == "TQBR"
+    assert rows[0].is_primary is True
+
+    assert rows[1].board == "SMAL"
+    assert rows[1].instrument_group == "SMAL"
+    assert rows[1].primary_board == "TQBR"
 
 
 def test_normalize_history_response_uses_board_from_request_context() -> None:
