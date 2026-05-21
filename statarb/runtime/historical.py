@@ -103,6 +103,8 @@ def _build_default_risk_policy(bundle: HistoricalSmokeBundle) -> PaperRiskPolicy
 
 
 def _load_fill_prices(bundle: HistoricalSmokeBundle) -> Mapping[str, Decimal]:
+    if bundle.fill_prices_by_symbol is not None:
+        return MappingProxyType(dict(bundle.fill_prices_by_symbol))
     return MappingProxyType(
         {
             symbol: _load_close_price_for_symbol(symbol=symbol, as_of=bundle.as_of)

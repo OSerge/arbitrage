@@ -12,14 +12,17 @@ from statarb.data.alor_storage import (
     write_quote_snapshot_dataset,
     write_security_snapshot_dataset,
 )
+from statarb.data.alor_history import LoadedAlorHistoryBarsDataset, load_history_bars_dataset
 
 __all__ = [
     "ALOR_MARKET_DATA_CONTRACT_VERSION",
     "AlorDatasetManifest",
+    "LoadedAlorHistoryBarsDataset",
     "PARQUET_PART_FILENAME",
     "StoredArtifact",
     "StoredDatasetBatch",
     "ingest_history_payload",
+    "load_history_bars_dataset",
     "persist_raw_alor_payload",
     "write_history_bars_dataset",
     "write_quote_snapshot_dataset",
