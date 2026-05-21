@@ -10,6 +10,45 @@
 
 ---
 
+## 0. Текущий статус реализации
+
+### Что уже зафиксировано
+
+На ветке `feat/agent-operated-mvp` уже собраны и закоммичены такие checkpoint slices:
+
+- `bbe3848` - foundation для `agent-operated` MVP: governance docs, rules/skills, базовый `statarb` shell и config profiles.
+- `e877323` - domain contracts и skeleton адаптера `Alor`.
+- `512e3e4` - executable historical `paper/replay` slice.
+- `2247d6e` - `historical E2E smoke` и open `Alor` market-data contract.
+- `03500c1` - foundation для хранения данных `AlorAPI` (`raw json.gz + normalized Parquet + manifest.json`).
+- `48a424d` - bootstrap от normalized `Parquet` датасетов `Alor`.
+- `5c6d031` - public fetch-runner для открытого `AlorAPI`.
+- `0e52ef2` - dataset discovery и pair bootstrap для датасетов `Alor`.
+
+### Что уже сделано по сути
+
+- governance foundation и `Agent Operating System` базового уровня;
+- executable domain contracts в docs и коде;
+- `Alor` public history path: fetch -> raw -> normalized `Parquet` -> manifest;
+- manifest-driven discovery и pair bootstrap runner;
+- deterministic `paper/replay` runtime и historical smoke path;
+- canonical bootstrap path от normalized `Alor` dataset с сохранением legacy fallback;
+- safe read-only slice для `Alor` test contour: auth refresh/access, private read-only HTTP surfaces, redacted WS plan и ручной `smoke` helper.
+
+### Что остается ключевым на следующую сессию
+
+Ближайший рекомендованный следующий шаг:
+
+1. вручную прогнать `Alor` test contour read-only smoke через `.env`;
+2. после успешной проверки начать `Securities/availableBoards enrichment`, чтобы стабилизировать `symbol + board + instrument_group` semantics;
+3. затем перейти к более полному adapter mapping из test contour payloads в canonical contracts и к первым read-model/operator workflows.
+
+### Правило handoff
+
+Новая сессия должна начинать работу с этого плана и последних checkpoint-коммитов, а не с повторного обхода всей архитектуры. Если предлагается новый шаг, он должен явно привязываться к одной из фаз ниже или быть оформлен как эволюционное уточнение текущей фазы.
+
+---
+
 ## 1. Исходные допущения
 
 - Одобренный первый implementation slice: `Agent Operating System -> domain contracts -> Alor adapter skeleton -> paper/replay contour`.
@@ -217,11 +256,11 @@
 - подтверждение package boundary: `core` как legacy, `statarb` как новый shell;
 - подтверждение, что `.env` остается допустимым secret-mechanism для MVP.
 
-- [ ] Создать `docs/README.md` и базовый индекс `docs/superpowers/`.
-- [ ] Зафиксировать `project-map` и `approval-matrix`.
-- [ ] Добавить runbook по `Alor` test contour.
-- [ ] Подготовить `statarb/` package shell и packaging changes.
-- [ ] Проверить, что docs и package shell не меняют existing research behavior.
+- [x] Создать `docs/README.md` и базовый индекс `docs/superpowers/`.
+- [x] Зафиксировать `project-map` и `approval-matrix`.
+- [x] Добавить runbook по `Alor` test contour.
+- [x] Подготовить `statarb/` package shell и packaging changes.
+- [x] Проверить, что docs и package shell не меняют existing research behavior.
 
 ### Phase 2: Domain contracts
 
@@ -257,10 +296,10 @@
 - freeze списка обязательных domain entities;
 - отдельное подтверждение любых breaking changes в уже зафиксированных contracts.
 
-- [ ] Зафиксировать docs contracts по data/research/execution/ops.
-- [ ] Реализовать executable contract shell в `statarb/domain/`.
-- [ ] Добавить fixture-driven tests для сериализации и базовой совместимости.
-- [ ] Согласовать contract freeze перед началом adapter work.
+- [x] Зафиксировать docs contracts по data/research/execution/ops.
+- [x] Реализовать executable contract shell в `statarb/domain/`.
+- [x] Добавить fixture-driven tests для сериализации и базовой совместимости.
+- [x] Согласовать contract freeze перед началом adapter work.
 
 ### Phase 3: `AlorAPI` adapter/test contour research and integration
 
@@ -309,11 +348,11 @@
 - approval env naming convention (`ALOR_TEST_REFRESH_TOKEN`, `ALOR_TEST_PORTFOLIO`, и т.п.);
 - отдельный approval перед любым command smoke-check, который выходит за пределы read-only semantics.
 
-- [ ] Зафиксировать endpoint map и contour selection.
-- [ ] Реализовать auth/token rotation shell.
-- [ ] Добавить read-only HTTP/WS clients.
-- [ ] Добавить canonical mapper для orders/fills/positions/account state.
-- [ ] Подготовить `cws` command skeleton без включения real trading path.
+- [x] Зафиксировать endpoint map и contour selection.
+- [x] Реализовать auth/token rotation shell.
+- [x] Добавить read-only HTTP/WS clients.
+- [x] Добавить canonical mapper для orders/fills/positions/account state.
+- [x] Подготовить `cws` command skeleton без включения real trading path.
 - [ ] Выполнить только safe smoke-checks против test contour.
 
 ### Phase 4: Paper/replay runtime
@@ -361,10 +400,10 @@
 - approval минимального набора risk guards;
 - approval event retention strategy, если она тянет за собой новые storage dependencies.
 
-- [ ] Собрать paper engine поверх domain contracts.
-- [ ] Добавить explicit risk checks и paper ledger.
-- [ ] Реализовать event sink и replay loader.
-- [ ] Зафиксировать replay parity tests.
+- [x] Собрать paper engine поверх domain contracts.
+- [x] Добавить explicit risk checks и paper ledger.
+- [x] Реализовать event sink и replay loader.
+- [x] Зафиксировать replay parity tests.
 - [ ] Подготовить короткий operator workflow для paper trading day.
 
 ### Phase 5: Minimal UI read-model slice
@@ -457,10 +496,10 @@
 - approval добавления `Postgres` как обязательной control-plane зависимости для prod-like profile;
 - отдельный approval на любые live-related toggles, даже если они остаются выключенными.
 
-- [ ] Зафиксировать `settings.py` и `profiles.py`.
-- [ ] Подготовить `.env.example` и profile-specific env examples.
+- [x] Зафиксировать `settings.py` и `profiles.py`.
+- [x] Подготовить `.env.example` и profile-specific env examples.
 - [ ] Описать запуск и recovery runbooks для двух профилей.
-- [ ] Проверить одинаковость contract surface между профилями.
+- [x] Проверить одинаковость contract surface между профилями.
 
 ## 7. Что можно делать параллельно агентами
 
@@ -503,7 +542,8 @@
 
 ## 11. Порядок handoff в следующую сессию
 
-- Начинать реализацию с `Phase 1`.
+- `Phase 1`, `Phase 2`, существенная часть `Phase 3`, `Phase 4` и config-basis `Phase 6` уже выполнены.
+- Начинать не с переосмысления foundation, а с ближайшего открытого шага: `Alor test contour read-only smoke` и затем `Securities/availableBoards enrichment`.
 - Не перескакивать сразу к `UI` или `live`.
 - После каждого phase gate делать review against this plan и contracts.
 - Любой новый domain object сначала добавлять в contracts/docs, потом в код.

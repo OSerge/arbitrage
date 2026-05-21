@@ -179,6 +179,39 @@ ALOR_TEST_PORTFOLIO=replace-me
 - попытки приблизить адаптер к live-ready execution behavior;
 - любые действия в `live` contour.
 
+## Read-only runner для первой проверки
+
+В репозитории есть manual helper:
+
+```bash
+uv run python -m statarb.runtime.alor_test_read_only plan --env-file .env
+```
+
+Что делает `plan`:
+
+- читает `ALOR_CONTOUR`, `ALOR_TEST_REFRESH_TOKEN` и `ALOR_TEST_PORTFOLIO` из `.env`;
+- валидирует, что выбран именно `test` contour;
+- печатает redacted auth/http/ws plan без сетевых вызовов и без `cws`.
+
+Реальный read-only smoke после заполнения `.env`:
+
+```bash
+uv run python -m statarb.runtime.alor_test_read_only smoke --env-file .env
+```
+
+Что делает `smoke`:
+
+- выполняет `refresh -> access token` exchange;
+- делает только read-only HTTP запросы `positions`, `summary`, `orders`, `trades`;
+- печатает HTTP payloads и redacted `ws` subscription envelopes для следующего ручного шага;
+- не поднимает `cws` и не содержит order placement / cancel surfaces.
+
+Если на первой проверке достаточно только базового account context, можно сузить scope:
+
+```bash
+uv run python -m statarb.runtime.alor_test_read_only smoke --env-file .env --skip-orders --skip-trades
+```
+
 ## Что пользователь должен подготовить перед первой реальной проверкой
 
 Минимальный набор:

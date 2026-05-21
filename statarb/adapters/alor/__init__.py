@@ -35,6 +35,13 @@ from statarb.adapters.alor.http_market_data import (
     recommended_history_storage_layout,
     recommended_snapshot_storage_layout,
 )
+from statarb.adapters.alor.http_portfolio import (
+    PortfolioOrdersRequest,
+    PortfolioPositionsRequest,
+    PortfolioRequest,
+    PortfolioSummaryRequest,
+    PortfolioTradesRequest,
+)
 from statarb.adapters.alor.mapper import (
     AlorPayloadMapper,
     CanonicalEventKind,
@@ -83,6 +90,11 @@ __all__ = [
     "OrdersSubscription",
     "PlaceholderAlorMapper",
     "PortfolioSubscription",
+    "PortfolioOrdersRequest",
+    "PortfolioPositionsRequest",
+    "PortfolioRequest",
+    "PortfolioSummaryRequest",
+    "PortfolioTradesRequest",
     "PositionsSubscription",
     "QuotesSubscription",
     "QuotesSnapshotRequest",
