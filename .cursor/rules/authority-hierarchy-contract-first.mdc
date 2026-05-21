@@ -1,0 +1,13 @@
+---
+description: Enforce authority hierarchy, contract-first changes, and no silent architecture drift
+alwaysApply: true
+---
+
+# Authority Hierarchy And Contract-First
+
+- Treat accepted `ADR` documents, MVP design constraints, and governance docs as higher authority than ad hoc code changes.
+- Never let code silently redefine architecture, runtime semantics, approval policy, or domain shape.
+- Before adding a new entity, module boundary, runtime behavior, or integration surface, update the matching docs, contracts, or rules in the same change or stop for approval.
+- If two sources conflict, follow the higher-order source or ask the user. Do not resolve the conflict silently in code.
+
+Required move: when a task changes architecture or semantics, update `docs/superpowers/` and, if the decision is durable, `docs/adr/` before calling the work complete.

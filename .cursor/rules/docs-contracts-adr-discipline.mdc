@@ -1,0 +1,12 @@
+---
+description: Keep docs, contracts, ADRs, and runbooks in sync with architecture and runtime changes
+alwaysApply: true
+---
+
+# Docs And Contract Discipline
+
+- Any change to architecture, runtime semantics, env naming, operator workflow, approval policy, or event shape must update the matching docs in the same workstream.
+- Use `docs/superpowers/` for active governance artifacts, contract docs, and runbooks.
+- Use `docs/adr/` only for durable architectural decisions that should outlive a single task or phase.
+- Use runbooks for procedures, contract docs for shapes and semantics, and `project-map` plus `approval-matrix` for boundaries and approval gates.
+- If you cannot identify which document should change, stop and ask instead of leaving silent drift behind.

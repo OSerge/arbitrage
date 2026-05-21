@@ -22,3 +22,10 @@ wheels/
 
 # pytest
 .pytest_cache
+
+# Local configuration
+.env
+.env.*
+!.env.example
+!ops/env/*.env.example
+ops/env/*.env

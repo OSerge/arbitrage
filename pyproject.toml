@@ -32,10 +32,11 @@ lint = [
 ]
 
 [tool.setuptools]
-packages = ["core"]
+package-dir = {"" = "."}
 
-[tool.setuptools.package-dir]
-"" = "."
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core", "core.*", "statarb", "statarb.*"]
 
 [tool.uv.workspace]
 members = ["."]

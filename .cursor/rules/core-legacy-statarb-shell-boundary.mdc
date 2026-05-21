@@ -1,0 +1,12 @@
+---
+description: Keep core as the legacy contour and statarb as the new platform shell
+alwaysApply: true
+---
+
+# Core And Statarb Boundary
+
+- Treat `core/` as legacy research and prototype code. Preserve behavior, read it for reference, and keep changes there contained.
+- Treat `statarb/` as the home for new platform-shell code: contracts-aligned runtime, adapters, control-plane modules, and future MVP packages.
+- Do not place new `agent-operated` architecture into `core/`.
+- Do not spread one new architectural slice across `core/` and `statarb/` unless the migration boundary and reason are documented.
+- If a task implies moving responsibility from `core/` to `statarb/`, update the governance docs and ask for approval before proceeding.
