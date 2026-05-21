@@ -11,6 +11,7 @@
 - не требует сразу тяжелого distributed lakehouse;
 - хорошо подходит для time-series, replay и research datasets;
 - разворачивается в self-hosted/российском контуре.
+- допускает ранний `local-dev` file-backed slice без смены logical dataset layout.
 
 ## Решение
 
@@ -21,6 +22,8 @@
 - `ClickHouse` для fast analytical serving;
 - `Postgres` для control plane.
 
+Практическое уточнение для раннего MVP: до поднятия объектного хранилища допустимо писать raw/normalized артефакты в локальную файловую систему, если layout и URI-структура остаются совместимыми с будущим `MinIO`-ключевым пространством, а `Parquet` остается primary normalized/read format.
+
 Полноценный catalog-heavy lakehouse формат вводить только после реальной потребности в multi-engine concurrent table management.
 
 ## Почему так
@@ -29,6 +32,7 @@
 - ClickHouse отлично подходит для screening, fast time-series analytics и monitoring workloads.
 - Postgres естественно закрывает metadata/config/audit registry use cases.
 - Такой стек проще внедрить и сопровождать в ранней стадии платформы.
+- File-backed local slice позволяет начать ingestion/bootstrap без инфраструктурного блокера и без возврата к `CSV`.
 
 ## Последствия
 
@@ -42,3 +46,4 @@
 
 - часть table-governance возможностей придется реализовывать дисциплиной и tooling;
 - при росте числа writers/readers позже может понадобиться более формальный catalog layer.
+- до подключения `MinIO` нужно дисциплинированно сохранять object-store-compatible layout, чтобы локальный slice не стал отдельной веткой эволюции.
