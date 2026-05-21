@@ -1,5 +1,6 @@
 """Minimal paper/replay runtime shell."""
 
+from statarb.runtime.alor_pair_bootstrap import PairBootstrapResult, run_alor_pair_bootstrap
 from statarb.runtime.historical import (
     HistoricalPaperReplaySmokeResult,
     run_historical_paper_replay_smoke,
@@ -27,6 +28,7 @@ __all__ = [
     "EventJournalRecord",
     "HistoricalPaperReplaySmokeResult",
     "JsonlEventSink",
+    "PairBootstrapResult",
     "PaperExecutionEngine",
     "PaperExecutionResult",
     "PaperLedger",
@@ -37,5 +39,6 @@ __all__ = [
     "decode_event_record",
     "evaluate_paper_risk_checks",
     "load_event_journal",
+    "run_alor_pair_bootstrap",
     "run_historical_paper_replay_smoke",
 ]

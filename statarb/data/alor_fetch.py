@@ -15,7 +15,10 @@ from statarb.adapters.alor.http_market_data import (
     HttpRequestShape,
 )
 from statarb.config import AlorContour
+from statarb.data.alor_discovery import discover_history_dataset_manifests, find_latest_history_dataset_manifest
 from statarb.data.alor_storage import StoredDatasetBatch, ingest_history_payload
+from statarb.domain import InstrumentType
+from statarb.runtime.alor_pair_bootstrap import run_alor_pair_bootstrap
 
 DEFAULT_PUBLIC_DATA_DELAY_MINUTES = 15
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -101,31 +104,28 @@ def fetch_public_history(
 def main(argv: list[str] | None = None, *, http_client: AlorHttpClient | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    if args.command != "history":
-        parser.error(f"Unsupported command: {args.command!r}")
-
-    request = HistoricalBarsRequest(
-        symbol=args.symbol,
-        exchange=args.exchange,
-        instrument_group=args.instrument_group,
-        tf=args.timeframe,
-        from_time=_parse_cli_timestamp(args.from_time),
-        to_time=_parse_cli_timestamp(args.to_time),
-        count_back=args.count_back,
-        untraded=args.untraded,
-        split_adjust=not args.no_split_adjust,
-        format=AlorObjectFormat.coerce(args.object_format),
-    )
-    result = fetch_public_history(
-        storage_root=Path(args.storage_root),
-        request=request,
-        contour=args.contour,
-        http_client=http_client,
-        request_id=args.request_id,
-        timeout_seconds=args.timeout_seconds,
-    )
-    print(
-        json.dumps(
+    if args.command == "history":
+        request = HistoricalBarsRequest(
+            symbol=args.symbol,
+            exchange=args.exchange,
+            instrument_group=args.instrument_group,
+            tf=args.timeframe,
+            from_time=_parse_cli_timestamp(args.from_time),
+            to_time=_parse_cli_timestamp(args.to_time),
+            count_back=args.count_back,
+            untraded=args.untraded,
+            split_adjust=not args.no_split_adjust,
+            format=AlorObjectFormat.coerce(args.object_format),
+        )
+        result = fetch_public_history(
+            storage_root=Path(args.storage_root),
+            request=request,
+            contour=args.contour,
+            http_client=http_client,
+            request_id=args.request_id,
+            timeout_seconds=args.timeout_seconds,
+        )
+        _print_summary(
             {
                 "contour": AlorContour.coerce(args.contour).value,
                 "dataset_id": result.batch.manifest.dataset_id,
@@ -135,19 +135,60 @@ def main(argv: list[str] | None = None, *, http_client: AlorHttpClient | None = 
                 "storage_uri": result.batch.normalized_artifact.storage_uri,
                 "symbol": request.symbol,
                 "timeframe": request.tf,
-            },
-            ensure_ascii=True,
-            indent=2,
-            sort_keys=True,
+            }
         )
-    )
+        return 0
+    if args.command == "discover":
+        query = {
+            "storage_root": Path(args.storage_root),
+            "symbol": args.symbol,
+            "exchange": args.exchange,
+            "timeframe": args.timeframe,
+            "instrument_group": _optional_cli_text(args.instrument_group),
+            "from_time": _parse_optional_cli_timestamp(args.from_time),
+            "to_time": _parse_optional_cli_timestamp(args.to_time),
+        }
+        if args.latest:
+            match = find_latest_history_dataset_manifest(**query)
+            if match is None:
+                raise FileNotFoundError("No matching Alor history dataset manifests found.")
+            _print_summary(match.to_dict())
+            return 0
+        _print_summary([match.to_dict() for match in discover_history_dataset_manifests(**query)])
+        return 0
+    if args.command == "pair-bootstrap":
+        result = run_alor_pair_bootstrap(
+            storage_root=Path(args.storage_root),
+            left_symbol=args.left_symbol,
+            right_symbol=args.right_symbol,
+            exchange=args.exchange,
+            timeframe=args.timeframe,
+            instrument_group=_optional_cli_text(args.instrument_group),
+            from_time=_parse_optional_cli_timestamp(args.from_time),
+            to_time=_parse_optional_cli_timestamp(args.to_time),
+            left_manifest_path=args.left_manifest_path,
+            right_manifest_path=args.right_manifest_path,
+            tail_rows=args.tail_rows,
+            lookback=args.lookback,
+            entry_threshold=args.entry_threshold,
+            exit_threshold=args.exit_threshold,
+            min_estimation_window=args.min_estimation_window,
+            recompute_frequency=args.recompute_frequency,
+            instrument_type=InstrumentType.coerce(args.instrument_type),
+            journal_path=args.journal_path,
+            run_smoke=not args.skip_smoke,
+        )
+        _print_summary(result.to_dict())
+        return 0
+
+    parser.error(f"Unsupported command: {args.command!r}")
     return 0
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m statarb.data.alor_fetch",
-        description="Fetch delayed public Alor historical bars into raw+normalized MVP storage.",
+        description="Fetch, discover, and bootstrap local Alor history datasets for the MVP.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     history = subparsers.add_parser("history", help="Fetch historical bars from public Alor HTTP API.")
@@ -173,6 +214,47 @@ def _build_parser() -> argparse.ArgumentParser:
     history.add_argument("--request-id")
     history.add_argument("--storage-root", default=str(_project_root()))
     history.add_argument("--timeout-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS)
+
+    discover = subparsers.add_parser(
+        "discover",
+        help="Find normalized local Alor history datasets by manifest metadata.",
+    )
+    discover.add_argument("--symbol")
+    discover.add_argument("--exchange")
+    discover.add_argument("--instrument-group")
+    discover.add_argument("--timeframe")
+    discover.add_argument("--from", dest="from_time")
+    discover.add_argument("--to", dest="to_time")
+    discover.add_argument("--latest", action="store_true")
+    discover.add_argument("--storage-root", default=str(_project_root()))
+
+    pair_bootstrap = subparsers.add_parser(
+        "pair-bootstrap",
+        help="Discover or load two Alor datasets, build the pair bridge, and optionally run paper/replay smoke.",
+    )
+    pair_bootstrap.add_argument("--left-symbol", required=True)
+    pair_bootstrap.add_argument("--right-symbol", required=True)
+    pair_bootstrap.add_argument("--exchange", default="MOEX")
+    pair_bootstrap.add_argument("--instrument-group")
+    pair_bootstrap.add_argument("--timeframe", default="60")
+    pair_bootstrap.add_argument("--from", dest="from_time")
+    pair_bootstrap.add_argument("--to", dest="to_time")
+    pair_bootstrap.add_argument("--left-manifest-path")
+    pair_bootstrap.add_argument("--right-manifest-path")
+    pair_bootstrap.add_argument("--tail-rows", type=int)
+    pair_bootstrap.add_argument("--lookback", type=int, default=60)
+    pair_bootstrap.add_argument("--entry-threshold", type=float, default=2.0)
+    pair_bootstrap.add_argument("--exit-threshold", type=float, default=0.5)
+    pair_bootstrap.add_argument("--min-estimation-window", type=int, default=512)
+    pair_bootstrap.add_argument("--recompute-frequency", type=int, default=16)
+    pair_bootstrap.add_argument(
+        "--instrument-type",
+        default=InstrumentType.FUTURE.value,
+        choices=[member.value for member in InstrumentType],
+    )
+    pair_bootstrap.add_argument("--journal-path")
+    pair_bootstrap.add_argument("--skip-smoke", action="store_true")
+    pair_bootstrap.add_argument("--storage-root", default=str(_project_root()))
     return parser
 
 
@@ -187,6 +269,23 @@ def _parse_cli_timestamp(value: str) -> int:
     else:
         parsed = parsed.astimezone(UTC)
     return int(parsed.timestamp())
+
+
+def _parse_optional_cli_timestamp(value: str | None) -> int | None:
+    if value is None:
+        return None
+    return _parse_cli_timestamp(value)
+
+
+def _optional_cli_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def _print_summary(payload: object) -> None:
+    print(json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True))
 
 
 def _mapping_payload(payload: Any) -> Mapping[str, Any]:
