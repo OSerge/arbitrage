@@ -55,6 +55,9 @@ Exit code:
 
 ```bash
 uv run python -m statarb.runtime.read_model inspect --journal-path artifacts/historical-smoke/manual-day.jsonl
+uv run python -m statarb.runtime.read_model_gateway export \
+  --journal-path artifacts/historical-smoke/manual-day.jsonl \
+  --output-dir var/local-dev/read-models/manual-day/
 ```
 
 6. Не смешивать paper journal с broker raw payloads: canonical shape должен оставаться source-of-truth для replay.

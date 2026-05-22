@@ -17,6 +17,7 @@
 - `alor-market-data.md` - public/open `AlorAPI` market-data surfaces, payload shapes и MVP storage conventions.
 - `alor-portfolio-mapping.md` - portfolio-scoped `Alor` HTTP/WS payloads -> canonical execution events.
 - `read-model-ops.md` - file-backed ops read-model over canonical JSONL journals.
+- `read-model-api.md` - frozen backend read-model JSON export for future UI.
 - `domain-data.md` - reference/data contracts для instrument и dataset lineage.
 - `domain-research.md` - research run и research intent contracts.
 - `domain-execution.md` - portfolio target, order/fill lifecycle, position/account snapshots.
