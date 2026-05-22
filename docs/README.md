@@ -12,7 +12,7 @@
 - `core/` как legacy research/prototype contour;
 - `statarb/` как активный platform shell для нового MVP-кода, контрактов-ориентированного runtime и адаптеров.
 
-`Phase 1` и `Phase 2` implementation plan в основном закрыты. Текущий operational focus: portfolio-scoped `Alor` read-only smoke после заполнения `ALOR_TEST_PORTFOLIO`, затем canonical mapper hardening на реальных portfolio payloads и первые read-model workflows.
+`Phase 1` и `Phase 2` implementation plan в основном закрыты. Текущий operational focus: canonical mapper hardening на portfolio payloads и file-backed ops read-model; следующий шаг — Phase 5 UI contract freeze (требует approval toolchain).
 
 ## Что читать в первую очередь
 

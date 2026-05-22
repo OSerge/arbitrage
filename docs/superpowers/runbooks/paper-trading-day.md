@@ -51,7 +51,13 @@ Exit code:
 2. Запустить `python -m statarb.runtime.paper_trading_day`.
 3. Сохранить printed summary и путь к JSONL journal как audit artifact.
 4. При необходимости повторно прочитать journal через replay loader/tests, не редактируя исходный файл.
-5. Не смешивать paper journal с broker raw payloads: canonical shape должен оставаться source-of-truth для replay.
+5. Для aggregated ops snapshot без replay выполнить:
+
+```bash
+uv run python -m statarb.runtime.read_model inspect --journal-path artifacts/historical-smoke/manual-day.jsonl
+```
+
+6. Не смешивать paper journal с broker raw payloads: canonical shape должен оставаться source-of-truth для replay.
 
 ## Расширенный contour: pair-bootstrap
 
@@ -93,5 +99,6 @@ Pair-bootstrap по умолчанию также запускает historical 
 
 - `statarb/runtime/paper_trading_day.py`
 - `statarb/runtime/historical.py`
+- `statarb/runtime/read_model.py`
 - `statarb/runtime/alor_pair_bootstrap.py`
 - `tests/runtime/test_paper_trading_day.py`
