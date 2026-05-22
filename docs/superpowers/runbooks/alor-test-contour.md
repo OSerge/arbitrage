@@ -268,6 +268,15 @@ uv run python -m statarb.runtime.alor_test_read_only smoke --env-file .env
 uv run python -m statarb.runtime.alor_test_read_only smoke --env-file .env --skip-orders --skip-trades
 ```
 
+Canonical preview после portfolio-scoped smoke (без live WS session):
+
+```bash
+uv run python -m statarb.runtime.alor_test_read_only smoke --env-file .env --with-canonical-preview
+uv run python -m statarb.runtime.alor_test_read_only map-preview --env-file .env
+```
+
+`map-preview` / `--with-canonical-preview` маппят HTTP `positions`/`summary`/`orders`/`trades` в canonical event preview; это journal-compatible shape preview, не запись в JSONL и не доказательство live-ready quality.
+
 ## Smoke execution log
 
 Операторская фиксация фактических проверок test contour. Секреты и access token в этот журнал не записываются.

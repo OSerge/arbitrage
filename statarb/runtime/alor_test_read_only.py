@@ -29,6 +29,7 @@ from statarb.adapters.alor.ws_portfolio import (
     TradesSubscription,
 )
 from statarb.config import AlorContour, RuntimeSettings, load_settings
+from statarb.runtime.alor_smoke_preview import build_canonical_preview
 
 ACCESS_TOKEN_PLACEHOLDER = "<ACCESS_TOKEN>"
 REFRESH_TOKEN_PLACEHOLDER = "<REFRESH_TOKEN>"
@@ -183,6 +184,18 @@ class ReadOnlySmokeResult:
         payload["http"] = [result.to_dict() for result in self.http_results]
         return payload
 
+    def to_dict_with_canonical_preview(self) -> dict[str, object]:
+        payload = self.to_dict()
+        smoke_scope = "portfolio_scoped" if self.plan.portfolio else "public_only"
+        payload["canonical_preview"] = build_canonical_preview(
+            http_results=self.http_results,
+            portfolio=self.plan.portfolio,
+            exchange=self.plan.exchange,
+            smoke_scope=smoke_scope,
+            captured_at=self.access_token_issued_at,
+        ).to_dict()
+        return payload
+
 
 def build_read_only_smoke_plan(
     settings: RuntimeSettings,
@@ -325,7 +338,36 @@ def main(
             without_currency=not args.include_currency,
             timeout_seconds=args.timeout_seconds,
         )
-        _print_summary(result.to_dict())
+        summary = (
+            result.to_dict_with_canonical_preview()
+            if args.with_canonical_preview
+            else result.to_dict()
+        )
+        _print_summary(summary)
+        return 0
+    if args.command == "map-preview":
+        result = run_read_only_smoke(
+            settings,
+            auth_client=auth_client or RequestsAlorAuthClient(),
+            http_client=http_client or RequestsAlorJsonHttpClient(),
+            exchange=args.exchange,
+            object_format=object_format,
+            include_orders=not args.skip_orders,
+            include_trades=not args.skip_trades,
+            skip_history=args.skip_history,
+            with_repo=args.with_repo,
+            without_currency=not args.include_currency,
+            timeout_seconds=args.timeout_seconds,
+        )
+        smoke_scope = "portfolio_scoped" if result.plan.portfolio else "public_only"
+        preview = build_canonical_preview(
+            http_results=result.http_results,
+            portfolio=result.plan.portfolio,
+            exchange=result.plan.exchange,
+            smoke_scope=smoke_scope,
+            captured_at=result.access_token_issued_at,
+        )
+        _print_summary(preview.to_dict())
         return 0
     parser.error(f"Unsupported command: {args.command!r}")
     return 0
@@ -354,7 +396,14 @@ def _build_parser() -> argparse.ArgumentParser:
             "Without portfolio, only the public securities probe is executed."
         ),
     )
-    for command in (plan, smoke):
+    map_preview = subparsers.add_parser(
+        "map-preview",
+        help=(
+            "Run portfolio-scoped read-only smoke and print canonical event preview "
+            "mapped from HTTP surfaces. Public-only scope yields an empty preview."
+        ),
+    )
+    for command in (plan, smoke, map_preview):
         command.add_argument("--env-file")
         command.add_argument("--exchange", default="MOEX")
         command.add_argument(
@@ -368,6 +417,12 @@ def _build_parser() -> argparse.ArgumentParser:
         command.add_argument("--with-repo", action="store_true")
         command.add_argument("--include-currency", action="store_true")
     smoke.add_argument("--timeout-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS)
+    smoke.add_argument(
+        "--with-canonical-preview",
+        action="store_true",
+        help="Include canonical event preview mapped from portfolio-scoped HTTP surfaces.",
+    )
+    map_preview.add_argument("--timeout-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS)
     return parser
 
 
