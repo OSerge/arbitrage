@@ -12,7 +12,7 @@
 - `core/` как legacy research/prototype contour;
 - `statarb/` как активный platform shell для нового MVP-кода, контрактов-ориентированного runtime и адаптеров.
 
-`Phase 1` и `Phase 2` implementation plan в основном закрыты. Текущий operational focus: canonical mapper hardening на portfolio payloads и file-backed ops read-model; следующий шаг — Phase 5 UI contract freeze (требует approval toolchain).
+`Phase 1`–`4` и backend slices `Phase 5`/`Phase 6` в implementation plan в основном закрыты. Явный оставшийся gate — **frontend UI toolchain approval** для `apps/internal-ui`.
 
 ## Что читать в первую очередь
 
@@ -20,10 +20,11 @@
 - `docs/superpowers/plans/2026-05-21-agent-operated-mvp-implementation-plan.md` — активный phased plan/handoff документ. Здесь фиксируются `done / in progress / next` по текущей ветке.
 - `docs/superpowers/project-map.md` — карта репозитория и граница `core/` vs `statarb/`.
 - `docs/superpowers/approval-matrix.md` — что агент может менять автономно и какие шаги требуют founder approval.
-- `docs/superpowers/runbooks/alor-test-contour.md` — operational runbook по `AlorAPI` test contour, включая smoke execution log и правило, где допустим public-only partial smoke без `portfolio`, а где `ALOR_TEST_PORTFOLIO` обязателен.
+- `docs/superpowers/runbooks/alor-test-contour.md` — operational runbook по `AlorAPI` test contour, включая smoke execution log и canonical preview commands.
 - `docs/superpowers/runbooks/paper-trading-day.md` — operator workflow для локального historical paper/replay trading day без брокерских соединений.
+- `ops/runbooks/local-dev.md` и `ops/runbooks/single-host-prod-like.md` — deployment/recovery runbooks для двух профилей.
 - `docs/superpowers/contracts/README.md` — индекс доменных и operational контрактов MVP.
-- `docs/superpowers/contracts/alor-market-data.md` — contract doc по open/public `AlorAPI` market-data surfaces и raw/normalized storage design.
+- `docs/superpowers/contracts/read-model-api.md` — frozen backend read-model JSON gateway для future UI.
 
 ## Статус по ветке
 
@@ -32,18 +33,17 @@
 - governance foundation и базовый `Agent Operating System`;
 - domain contracts и их executable shell;
 - historical `paper/replay` contour;
-- `Alor` public data path: fetch -> raw -> normalized `Parquet` -> manifest;
-- safe read-only `Alor` adapter/runtime slice, включая корректный refresh `token` shape;
-- partial public-only smoke path, который может работать без `ALOR_TEST_PORTFOLIO`;
-- enrichment-aware `history` fetch и `pair-bootstrap` через локальные `Securities`/`availableBoards` snapshots;
-- public-only partial `Alor test contour` smoke выполнен 2026-05-22 и зафиксирован в runbook;
-- operator workflow для historical paper/replay trading day.
+- `Alor` public data path и safe read-only adapter/runtime slice;
+- portfolio-scoped read-only smoke (`D00014`) и canonical mapper preview (`map-preview`);
+- file-backed ops/research/risk read-model gateway (`read_model_gateway export`);
+- operator workflows для paper/replay и test contour;
+- deployment profile runbooks и env examples.
 
-Остаются ближайшими шагами:
+Остаётся explicit approval gate:
 
-1. заполнить `ALOR_TEST_PORTFOLIO` и пройти portfolio-scoped read-only smoke для `/md/v2/Clients/...` и `ws_portfolio` surfaces;
-2. расширить canonical mapping на реальные portfolio payloads из test contour;
-3. только после этого возвращаться к более широким `.env`/profile/live-extension шагам и UI slice.
+1. frontend toolchain + `apps/internal-ui` shell (Phase 5 screens);
+2. любой live enablement и `cws` command-path smoke;
+3. optional Postgres как обязательная prod-like dependency — только по отдельному approval.
 
 ## Долгоживущая архитектура и более широкий контекст
 

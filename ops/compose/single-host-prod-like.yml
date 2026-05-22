@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: statarb
+      POSTGRES_USER: statarb
+      POSTGRES_PASSWORD: statarb
+    ports:
+      - "5432:5432"
+    volumes:
+      - statarb_pg_data:/var/lib/postgresql/data
+
+volumes:
+  statarb_pg_data:

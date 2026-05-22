@@ -49,19 +49,19 @@
 
 ### Что сейчас считается незавершенным
 
-- public-only partial `Alor` `test` contour smoke через локальный `.env` выполнен 2026-05-22 и зафиксирован в runbook;
-- portfolio-scoped read-only smoke остается отдельным ручным шагом: `ALOR_TEST_PORTFOLIO` в `.env` пока пустой;
-- mapper/read-model/operator workflows еще не доведены до следующего checkpoint;
-- расширение `.env`/profile/live-related contour остается follow-up workstream, а не частью текущего safe smoke.
+- portfolio-scoped read-only smoke выполнен (`D00014`, 2026-05-23) и зафиксирован в runbook;
+- canonical mapper интегрирован в smoke preview path (`map-preview`, `--with-canonical-preview`);
+- backend read-model JSON gateway frozen; UI shell и frontend toolchain остаются explicit approval gate;
+- live/`cws` command-path smoke и live enablement остаются за отдельными approvals.
 
 ### Что остается ключевым на следующую сессию
 
 Ближайший рекомендованный следующий шаг:
 
-1. вручную прогнать public-only partial `Alor` `test` contour smoke через `.env` без `ALOR_TEST_PORTFOLIO`, чтобы подтвердить refresh/access exchange и базовый read-only probe;
-2. при наличии `ALOR_TEST_PORTFOLIO` отдельно прогнать portfolio-scoped read-only smoke для `/md/v2/Clients/...` и `ws_portfolio`-ориентированных surfaces;
-3. перейти к более полному adapter mapping из test contour payloads в canonical contracts и к первым read-model/operator workflows;
-4. только после этого возвращаться к более широким `.env`/profile/live-extension шагам и UI slice.
+1. получить explicit approval на frontend toolchain и начать `apps/internal-ui` shell поверх frozen read-model JSON;
+2. при появлении непустых orders/trades/positions на test contour — расширить mapper fixtures реальными payloads;
+3. optional: read-only WS session supervisor (planning/subscribe semantics без command path) — только если не пересекается live gates;
+4. любой live/`cws` smoke или Postgres-as-required — только после отдельного approval.
 
 ### Правило handoff
 
@@ -377,7 +377,7 @@
 - [x] Подготовить `cws` command skeleton без включения real trading path.
 - [x] Подготовить helper, который поддерживает public-only partial smoke без `ALOR_TEST_PORTFOLIO`.
 - [x] Выполнить ручной public-only partial smoke против test contour через `.env`.
-- [ ] Выполнить portfolio-scoped read-only smoke при наличии `ALOR_TEST_PORTFOLIO`.
+- [x] Выполнить portfolio-scoped read-only smoke при наличии `ALOR_TEST_PORTFOLIO`.
 
 ### Phase 4: Paper/replay runtime
 
@@ -474,7 +474,7 @@
 - approval конкретного минимального набора экранов до начала реализации.
 
 - [ ] Подготовить `apps/internal-ui` shell.
-- [ ] Зафиксировать read-model contract между backend и UI.
+- [x] Зафиксировать read-model contract между backend и UI (file-backed JSON gateway freeze, без frontend toolchain).
 - [ ] Реализовать по одному минимальному экрану для `research`, `ops`, `risk`.
 - [ ] Проверить, что UI остается вне critical path.
 
@@ -522,7 +522,7 @@
 
 - [x] Зафиксировать `settings.py` и `profiles.py`.
 - [x] Подготовить `.env.example` и profile-specific env examples.
-- [ ] Описать запуск и recovery runbooks для двух профилей.
+- [x] Описать запуск и recovery runbooks для двух профилей.
 - [x] Проверить одинаковость contract surface между профилями.
 
 ## 7. Что можно делать параллельно агентами
@@ -567,8 +567,9 @@
 ## 11. Порядок handoff в следующую сессию
 
 - `Phase 1` и `Phase 2` по сути закрыты; `Phase 3` собран до safe read-only smoke gate; core `Phase 4` выполнена; config-basis `Phase 6` уже есть.
-- Public-only partial `Alor test contour` smoke уже выполнен; ближайший открытый adapter step — portfolio-scoped read-only smoke после заполнения `ALOR_TEST_PORTFOLIO`.
-- После portfolio-scoped smoke идти в canonical mapper hardening на реальных portfolio payloads и первые read-model workflows.
+- Public-only partial `Alor test contour` smoke выполнен; portfolio-scoped read-only smoke выполнен; canonical preview доступен через `map-preview`.
+- Backend read-model JSON gateway frozen (`read-model-api.md`); UI toolchain остаётся explicit approval gate.
+- Deployment profile runbooks (`ops/runbooks/local-dev.md`, `ops/runbooks/single-host-prod-like.md`) закрывают Phase 6 recovery slice.
 - Для paper/replay contour использовать `docs/superpowers/runbooks/paper-trading-day.md` и `python -m statarb.runtime.paper_trading_day`.
 - Более широкие `.env`/profile/live-extension шаги считать отдельным follow-up, а не implicit продолжением safe smoke.
 - Не перескакивать сразу к `UI` или `live`.
