@@ -12,6 +12,12 @@
 
 ## 0. Текущий статус реализации
 
+### Классификация текущей синхронизации
+
+- Тип изменения: `non-breaking clarification`.
+- Назначение: синхронизировать active docs/handoff слой с уже выполненной работой по `agent-operated` MVP и `Alor` test contour.
+- Новый `ADR` для этой синхронизации не требуется: принятые `ADR` остаются совместимыми с текущим узким MVP-срезом.
+
 ### Что уже зафиксировано
 
 На ветке `feat/agent-operated-mvp` уже собраны и закоммичены такие checkpoint slices:
@@ -35,15 +41,28 @@
 - manifest-driven discovery и pair bootstrap runner;
 - deterministic `paper/replay` runtime и historical smoke path;
 - canonical bootstrap path от normalized `Alor` dataset с сохранением legacy fallback;
-- safe read-only slice для `Alor` test contour: auth refresh/access, private read-only HTTP surfaces, redacted WS plan и ручной `smoke` helper.
+- safe read-only slice для `Alor` test contour: auth refresh/access, private read-only HTTP surfaces, redacted WS plan и ручной `smoke` helper;
+- корректный refresh contract с параметром `token`, а не со старым shape;
+- public-only partial smoke path без `ALOR_TEST_PORTFOLIO` как допустимый безопасный первый шаг;
+- явное разделение: portfolio-scoped read-only surfaces требуют `ALOR_TEST_PORTFOLIO`, а `cws`/live остаются отдельными шагами.
+
+### Что сейчас считается незавершенным
+
+- реальный ручной `Alor` `test` contour smoke через локальный `.env` еще не зафиксирован как выполненный;
+- portfolio-scoped read-only smoke остается отдельным ручным шагом после получения `ALOR_TEST_PORTFOLIO`;
+- `Securities/availableBoards` enrichment еще не встроен до конца в `fetch/bootstrap` путь;
+- mapper/read-model/operator workflows еще не доведены до следующего checkpoint;
+- расширение `.env`/profile/live-related contour остается follow-up workstream, а не частью текущего safe smoke.
 
 ### Что остается ключевым на следующую сессию
 
 Ближайший рекомендованный следующий шаг:
 
-1. вручную прогнать `Alor` test contour read-only smoke через `.env`;
-2. связать `Securities/availableBoards enrichment` с `fetch/bootstrap` flow, чтобы `instrument_group` и `board` выбирались не вручную, а из локального `Alor`-ориентированного reference slice;
-3. затем перейти к более полному adapter mapping из test contour payloads в canonical contracts и к первым read-model/operator workflows.
+1. вручную прогнать public-only partial `Alor` `test` contour smoke через `.env` без `ALOR_TEST_PORTFOLIO`, чтобы подтвердить refresh/access exchange и базовый read-only probe;
+2. при наличии `ALOR_TEST_PORTFOLIO` отдельно прогнать portfolio-scoped read-only smoke для `/md/v2/Clients/...` и `ws_portfolio`-ориентированных surfaces;
+3. связать `Securities/availableBoards enrichment` с `fetch/bootstrap` flow, чтобы `instrument_group` и `board` выбирались не вручную, а из локального `Alor`-ориентированного reference slice;
+4. затем перейти к более полному adapter mapping из test contour payloads в canonical contracts и к первым read-model/operator workflows;
+5. только после этого возвращаться к более широким `.env`/profile/live-extension шагам и UI slice.
 
 ### Правило handoff
 
@@ -335,13 +354,15 @@
 - test contour выбирается конфигурацией, а не хардкодом;
 - токен rotation отделен от business logic;
 - adapter умеет читать quotes/orders/trades/positions/account state и маппить их в внутренние контракты;
+- public-only partial smoke path возможен без `ALOR_TEST_PORTFOLIO`, если шаг ограничен безопасным read-only scope;
+- `ALOR_TEST_PORTFOLIO` требуется только для portfolio-scoped HTTP surfaces и `ws_portfolio` subscriptions;
 - order-command path существует как skeleton, но не создает неявный live-ready behavior;
 - reconnect и duplicate-guid policy задокументированы и покрыты тестами на уровне логики.
 
 **Dependencies/blockers:**
 
 - валидный `Refresh Token`;
-- известный `portfolio` для тестового счета;
+- известный `portfolio` для тестового счета нужен только для portfolio-scoped read-only surfaces;
 - фактическая доступность test contour в момент smoke-check;
 - возможные отличия в payloads по сравнению с live.
 
@@ -355,7 +376,9 @@
 - [x] Добавить read-only HTTP/WS clients.
 - [x] Добавить canonical mapper для orders/fills/positions/account state.
 - [x] Подготовить `cws` command skeleton без включения real trading path.
-- [ ] Выполнить только safe smoke-checks против test contour.
+- [x] Подготовить helper, который поддерживает public-only partial smoke без `ALOR_TEST_PORTFOLIO`.
+- [ ] Выполнить ручной public-only partial smoke против test contour через `.env`.
+- [ ] Выполнить portfolio-scoped read-only smoke при наличии `ALOR_TEST_PORTFOLIO`.
 
 ### Phase 4: Paper/replay runtime
 
@@ -544,8 +567,11 @@
 
 ## 11. Порядок handoff в следующую сессию
 
-- `Phase 1`, `Phase 2`, существенная часть `Phase 3`, `Phase 4` и config-basis `Phase 6` уже выполнены.
-- Начинать не с переосмысления foundation, а с ближайшего открытого шага: ручной `Alor test contour read-only smoke`, затем `enrichment-aware fetch/bootstrap helper`.
+- `Phase 1` и `Phase 2` по сути закрыты; `Phase 3` собран до safe read-only smoke gate; core `Phase 4` выполнена; config-basis `Phase 6` уже есть.
+- Начинать не с переосмысления foundation, а с ближайшего открытого шага: ручной public-only partial `Alor test contour` smoke через `.env`.
+- Если есть `ALOR_TEST_PORTFOLIO`, следующим шагом идет portfolio-scoped read-only smoke для `/md/v2/Clients/...` и `ws_portfolio`.
+- После smoke идти в `enrichment-aware fetch/bootstrap helper`, затем в canonical mapper hardening и первые read-model/operator workflows.
+- Более широкие `.env`/profile/live-extension шаги считать отдельным follow-up, а не implicit продолжением safe smoke.
 - Не перескакивать сразу к `UI` или `live`.
 - После каждого phase gate делать review against this plan и contracts.
 - Любой новый domain object сначала добавлять в contracts/docs, потом в код.

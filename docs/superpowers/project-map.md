@@ -7,9 +7,11 @@ This file gives agents a compact map of the repository, the intended MVP boundar
 ## Working Context
 
 - This repository is operated by one founder with AI agents.
-- The current slice is the `agent-operated` MVP, starting with the governance layer.
+- The current slice is the narrow `agent-operated` MVP: `paper-first + controlled Alor contour`.
+- `Phase 1` and `Phase 2` are largely complete on the current branch.
+- The current implementation focus is `Alor` test contour read-only smoke and follow-up adapter/runtime hardening.
 - `core/` remains the legacy research/prototype contour.
-- `statarb/` is the reserved new platform shell for MVP code that follows the approved contracts and boundaries.
+- `statarb/` is the active platform shell for MVP code that follows the approved contracts and boundaries.
 - `docs/superpowers/` is the home of the `Agent Operating System` artifacts.
 
 ## Source Of Truth
@@ -22,7 +24,7 @@ Use this order when deciding what is allowed:
 4. Execution sequencing in `docs/superpowers/plans/2026-05-21-agent-operated-mvp-implementation-plan.md`.
 5. Existing code.
 
-Until dedicated contract docs exist, the design spec plus the governance artifacts define the working contract for Phase 1.
+The accepted design spec, contract docs in `docs/superpowers/contracts/`, and the governance artifacts together define the current working contract for the MVP slice.
 
 ## Repository Zones
 
@@ -34,8 +36,9 @@ Until dedicated contract docs exist, the design spec plus the governance artifac
 
 ### `statarb/`
 
-- New platform shell for upcoming `statarb` modules.
-- New MVP runtime, adapters, contracts-aligned services, and control-plane code should land here in later phases.
+- Active platform shell for the current MVP implementation.
+- New MVP runtime, adapters, contracts-aligned services, bridges, and control-plane code belong here.
+- Existing code in this area already includes adapter, runtime, data, and config slices; continue extending them here rather than adding new MVP layers to `core/`.
 - Do not split a new architectural slice across `core/` and `statarb/` without a documented migration reason.
 
 ### `docs/`
@@ -95,7 +98,8 @@ Do not add a new top-level directory without explicit approval.
 ## Session Start For Agents
 
 1. Read `docs/README.md`.
-2. Read the current MVP design spec and implementation plan in `docs/superpowers/`.
+2. Read the current MVP design spec and active implementation plan in `docs/superpowers/`.
 3. Read `docs/superpowers/project-map.md` and `docs/superpowers/approval-matrix.md`.
 4. Check whether the task touches architecture, contracts, risk policy, or live-related behavior.
-5. Update the governance layer first when the task changes repo boundaries or operating rules.
+5. If the task is status-sensitive, check the current `done / in progress / next` state in the implementation plan and relevant runbook before proposing new work.
+6. Update the governance layer first when the task changes repo boundaries or operating rules.

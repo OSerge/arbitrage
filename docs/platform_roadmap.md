@@ -1,5 +1,7 @@
 # Roadmap развития платформы
 
+> Текущий активный execution contour уже, чем весь этот roadmap: рабочим backlog для ветки служит узкий `agent-operated` MVP из `docs/superpowers/specs/2026-05-21-agent-operated-mvp-design.md` и его implementation plan. Этот roadmap остается долгосрочной траекторией, а не списком ближайших задач на следующую сессию.
+
 ## Принципы roadmap
 
 Roadmap строится не вокруг "добавить еще пару моделей", а вокруг последовательного появления платформенных слоев:

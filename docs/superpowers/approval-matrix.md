@@ -20,6 +20,7 @@ Agents may proceed without additional approval when the work stays inside the al
 - add focused tests, fixtures, and validation checks;
 - prepare research reviews, alpha notes, and proposal writeups without changing the approved alpha family;
 - improve paper-only or read-only operator workflows.
+- run `Alor` test contour read-only validation inside the safe scope, including public-only partial smoke without `ALOR_TEST_PORTFOLIO` and portfolio-scoped read-only probes when `ALOR_TEST_PORTFOLIO` is provided.
 
 ## Approval Required Before Change
 

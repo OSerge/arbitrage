@@ -1,27 +1,61 @@
 # Документация проекта
 
-Этот каталог содержит архитектурные, исследовательские и governance-артефакты вокруг `agent-operated` MVP для платформы статистического арбитража.
+Этот каталог содержит архитектурные, governance- и операционные артефакты вокруг текущего узкого `agent-operated` MVP для платформы статистического арбитража.
+
+## Актуальный рабочий контур
+
+Сейчас активным контуром проекта считается:
+
+- узкий `agent-operated` MVP;
+- `paper-first` runtime;
+- controlled `Alor` `test/live` contour, где практический текущий фокус ограничен `test` и read-only шагами;
+- `core/` как legacy research/prototype contour;
+- `statarb/` как активный platform shell для нового MVP-кода, контрактов-ориентированного runtime и адаптеров.
+
+`Phase 1` и `Phase 2` implementation plan в основном закрыты. Текущий ближайший operational focus: ручной `Alor` `test` contour read-only smoke, затем доработка reference/enrichment wiring, canonical mapping и первых operator/read-model workflows.
 
 ## Что читать в первую очередь
 
-- `docs/superpowers/specs/2026-05-21-agent-operated-mvp-design.md` — согласованный design spec для узкого `agent-operated` MVP: `paper-first platform + controlled Alor test/live contour`.
-- `docs/superpowers/plans/2026-05-21-agent-operated-mvp-implementation-plan.md` — детальный phased implementation plan для `agent-operated` MVP: `Agent Operating System`, domain contracts, `AlorAPI` test contour, paper/replay runtime, minimal UI read-model slice, `local-dev` и `single-host-prod-like` profiles.
-- `docs/superpowers/contracts/alor-market-data.md` — contract doc по open/public `AlorAPI` market-data surfaces: доступные HTTP endpoints, реальные payload shapes и рекомендуемый raw + normalized storage design для MVP.
-- `docs/superpowers/runbooks/alor-test-contour.md` — operational runbook по `AlorAPI` test contour: endpoints, auth lifecycle, reconnect/resubscribe discipline, limits и подготовка к первой реальной интеграционной проверке.
-- `docs/target_platform_architecture.md` — целевая архитектура всей платформы, от которой MVP сознательно отрезает лишнюю раннюю сложность.
-- `docs/platform_roadmap.md` — roadmap развития от foundation к более зрелому execution/risk контуру.
-- `docs/frontend_ui_architecture.md` — решение по бесплатному frontend-стеку и роли `Research UI`, `Ops UI`, `Risk UI`.
-- `docs/russian_market_integrations.md` — обзор российских интеграций и практических подключений для `MOEX`-контура.
+- `docs/superpowers/specs/2026-05-21-agent-operated-mvp-design.md` — утвержденный design spec для узкого `agent-operated` MVP: `paper-first platform + controlled Alor test/live contour`.
+- `docs/superpowers/plans/2026-05-21-agent-operated-mvp-implementation-plan.md` — активный phased plan/handoff документ. Здесь фиксируются `done / in progress / next` по текущей ветке.
+- `docs/superpowers/project-map.md` — карта репозитория и граница `core/` vs `statarb/`.
+- `docs/superpowers/approval-matrix.md` — что агент может менять автономно и какие шаги требуют founder approval.
+- `docs/superpowers/runbooks/alor-test-contour.md` — operational runbook по `AlorAPI` test contour, включая правило, где допустим public-only partial smoke без `portfolio`, а где `ALOR_TEST_PORTFOLIO` обязателен.
+- `docs/superpowers/contracts/README.md` — индекс доменных и operational контрактов MVP.
+- `docs/superpowers/contracts/alor-market-data.md` — contract doc по open/public `AlorAPI` market-data surfaces и raw/normalized storage design.
 
-## Дополнительные материалы
+## Статус по ветке
 
-- `docs/adr/0001-separate-research-and-live-runtime.md` — разделение исследовательского и торгового runtime.
-- `docs/adr/0002-build-core-execution-risk-simulation.md` — почему execution/risk/simulation должны оставаться core-контуром проекта.
-- `docs/adr/0003-parquet-clickhouse-postgres-foundation.md` — стартовый storage/control-plane контур.
-- `docs/adr/0004-python-first-mvp-runtime.md` — фиксация `Python-first` стратегии для MVP.
-- `docs/project_structure.md` — обзор структуры проекта и направлений эволюции репозитория.
-- `docs/research_analysis_and_improvements.md` — более широкий анализ исследовательского контура и направлений улучшения.
+На текущем этапе уже зафиксированы:
 
-## Примечание
+- governance foundation и базовый `Agent Operating System`;
+- domain contracts и их executable shell;
+- historical `paper/replay` contour;
+- `Alor` public data path: fetch -> raw -> normalized `Parquet` -> manifest;
+- safe read-only `Alor` adapter/runtime slice, включая корректный refresh `token` shape;
+- partial public-only smoke path, который может работать без `ALOR_TEST_PORTFOLIO`.
 
-Сейчас в ветке собраны и долгосрочные архитектурные документы, и узкие `spec/plan`-артефакты для текущего MVP. Реализацию имеет смысл вести, опираясь в первую очередь на `design spec` и `implementation plan`, а более широкие архитектурные документы использовать как верхнеуровневые ограничения и ориентир развития.
+Остаются ближайшими шагами:
+
+1. вручную прогнать `Alor` `test` contour read-only smoke через локальный `.env`;
+2. отдельно пройти portfolio-scoped read-only smoke там, где нужны `/md/v2/Clients/...` и `ws_portfolio` surfaces;
+3. связать `Securities/availableBoards` enrichment с `fetch/bootstrap`;
+4. расширить canonical mapping и первые operator/read-model workflows;
+5. только после этого возвращаться к более широким `.env`/profile/live-extension шагам и UI slice.
+
+## Долгоживущая архитектура и более широкий контекст
+
+Следующие документы остаются верхнеуровневыми ограничениями и траекторией развития, но не являются текущим execution backlog по ветке:
+
+- `docs/adr/0001-separate-research-and-live-runtime.md`
+- `docs/adr/0002-build-core-execution-risk-simulation.md`
+- `docs/adr/0003-parquet-clickhouse-postgres-foundation.md`
+- `docs/adr/0004-python-first-mvp-runtime.md`
+- `docs/target_platform_architecture.md`
+- `docs/platform_roadmap.md`
+- `docs/frontend_ui_architecture.md`
+- `docs/russian_market_integrations.md`
+- `docs/project_structure.md`
+- `docs/research_analysis_and_improvements.md`
+
+Практическое правило: для текущей реализации сначала смотреть в `design spec`, затем в активный `implementation plan`, а более широкие архитектурные документы использовать как authority layer и ориентир следующей эволюции.

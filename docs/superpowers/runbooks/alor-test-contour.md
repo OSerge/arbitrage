@@ -7,6 +7,14 @@
 
 Этот runbook фиксирует практические правила эксплуатации `AlorAPI` test contour в рамках `Phase 1: Agent Operating System foundation` и следующей волны интеграции адаптера. Документ не включает live enablement и не переопределяет implementation plan; его задача - перевести уже согласованные выводы в повторяемые operational шаги.
 
+## Текущий operational status
+
+- В репозитории уже есть safe helper/runner для `plan` и `smoke` сценариев в рамках read-only `test` contour.
+- Public-only partial smoke допустим без `ALOR_TEST_PORTFOLIO`, если шаг ограничен refresh/access exchange и public probe.
+- `ALOR_TEST_PORTFOLIO` обязателен только там, где нужны portfolio-scoped HTTP surfaces и `ws_portfolio` subscriptions.
+- Реальный ручной smoke через локальный `.env` остается отдельным операторским шагом и не считается автоматически выполненным только потому, что helper уже реализован.
+- `cws` и любой `live`-related expansion остаются отдельными approval-gated workstreams.
+
 ## Scope и границы решений
 
 - Для MVP безопасным рабочим контуром считается только `test`.

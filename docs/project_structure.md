@@ -2,152 +2,92 @@
 
 ## Обзор
 
-Проект организован в модульную структуру для обеспечения читаемости, поддерживаемости и расширяемости кода.
+Этот документ описывает актуальную структуру репозитория для текущего узкого `agent-operated` MVP. Главная граница сейчас проходит между:
 
-## Структура директорий
+- `core/` как legacy research/prototype contour;
+- `statarb/` как активным platform shell для нового MVP runtime, адаптеров и contracts-aligned кода;
+- `docs/superpowers/` как governance-слоем для agent-operated разработки.
 
-```
+## Верхнеуровневая структура
+
+```text
 arbitrage/
-├── core/                    # Основные модули системы
-│   ├── __init__.py         # Инициализация пакета
-│   ├── analysis.py         # Анализ данных и коинтеграция
-│   ├── backtest.py         # Бэктестинг стратегий
-│   ├── config.py           # Конфигурация системы
-│   ├── data.py             # Управление данными
-│   ├── interfaces.py       # Абстракции и интерфейсы
-│   └── validation.py       # Валидация математической корректности
-├── data/                   # Данные для анализа
-│   ├── *.csv              # CSV файлы с историческими данными
-│   └── cache/             # Кэшированные данные
-├── docs/                   # Документация проекта
-│   ├── project_structure.md # Структура проекта (этот файл)
-│   └── validation_fixes.md # Документация исправлений
-├── notebooks/              # Jupyter notebooks для исследований
-│   ├── *.ipynb            # Исследовательские блокноты
-│   └── examples/          # Примеры использования
-├── tests/                  # Тесты
-│   ├── __init__.py
-│   ├── test_*.py          # Модульные тесты
-│   └── fixtures/          # Тестовые данные
-├── utils/                  # Вспомогательные скрипты и утилиты
-│   ├── __init__.py        # Инициализация пакета утилит
-│   └── validate_arbitrage.py # Скрипт валидации системы
-├── pyproject.toml          # Конфигурация проекта и зависимости
-├── uv.lock                 # Зафиксированные версии зависимостей
-├── requirements.txt        # Зависимости (legacy)
-└── README.md              # Основная документация
+├── core/                         # Legacy research/prototype contour
+├── statarb/                      # Active MVP platform shell
+│   ├── adapters/alor/            # Alor endpoints, auth, HTTP/WS/CWS clients, mapper
+│   ├── bridges/                  # Runtime/data bridges между срезами
+│   ├── config/                   # Profiles и settings
+│   ├── data/                     # Fetch, storage, discovery, reference helpers
+│   ├── domain/                   # Executable domain contracts
+│   └── runtime/                  # Historical, paper, replay, smoke helpers
+├── docs/
+│   ├── adr/                      # Durable architectural decisions
+│   ├── superpowers/              # Specs, plans, contracts, runbooks, governance
+│   └── *.md                      # Broader architecture and roadmap docs
+├── ops/
+│   └── env/                      # Profile-specific env examples
+├── tests/
+│   ├── adapters/                 # Adapter-level tests
+│   ├── bridges/                  # Bridge/historical smoke tests
+│   ├── contracts/                # Contract compatibility tests
+│   ├── data/                     # Data/reference/storage tests
+│   ├── runtime/                  # Runtime and replay tests
+│   └── statarb/                  # Config/settings tests
+├── data/                         # Local datasets and artifacts
+├── notebooks/                    # Research workspace
+├── .cursor/                      # Repo-local rules, skills, settings
+├── pyproject.toml                # Project packaging and dependencies
+├── uv.lock                       # Locked dependency set
+└── .env.example                  # Local env template for MVP profiles
 ```
 
-## Описание модулей
+## Ключевые зоны репозитория
 
-### Core модули (`core/`)
+### `core/`
 
-#### `analysis.py`
-- **Назначение**: Анализ временных рядов и тестирование коинтеграции
-- **Основные классы**: `DataAnalyzer`
-- **Ключевые методы**:
-  - `engle_granger_test()` - тест коинтеграции Энгла-Грейнджера
-  - `calculate_zscore()` - расчет Z-score для пары инструментов
-  - `join_pair()` - объединение данных по парам
+- Источник legacy research и prototype logic.
+- Можно читать для reference, переносить выводы и делать локальные bugfix/refactor без смены границ.
+- Не является местом для новой `agent-operated` архитектуры.
 
-#### `backtest.py`
-- **Назначение**: Бэктестинг торговых стратегий
-- **Основные классы**: `Backtester`
-- **Особенности**:
-  - Walk-forward анализ без look-ahead bias
-  - Учет комиссий и проскальзывания
-  - Анализ рисков методом Монте-Карло
+### `statarb/`
 
-#### `data.py`
-- **Назначение**: Управление данными и их хранение
-- **Основные классы**: `DataManager`, `DataStorage`
-- **Функции**: Загрузка, кэширование и обработка данных
+- Основной кодовый контур текущего MVP.
+- Здесь уже живут adapter, data, runtime и contract-aligned slices.
+- Новая MVP-логика должна по умолчанию попадать сюда, а не в `core/`.
 
-#### `validation.py`
-- **Назначение**: Валидация математической корректности
-- **Основные классы**: `ArbitrageValidator`
-- **Проверки**:
-  - Корректность коэффициентов коинтеграции
-  - Правильность расчета доходности
-  - Валидация метрик производительности
+### `docs/superpowers/`
 
-#### `config.py`
-- **Назначение**: Централизованная конфигурация
-- **Содержит**: Торговые параметры, настройки анализа
+- Основной governance-слой для agent-operated работы.
+- Здесь находятся:
+  - `specs/` — активные design constraints;
+  - `plans/` — текущий phased implementation plan и handoff;
+  - `contracts/` — domain и operational contracts;
+  - `runbooks/` — operational procedures;
+  - `project-map.md` и `approval-matrix.md` — repo boundaries и decision gates.
 
-#### `interfaces.py`
-- **Назначение**: Абстракции для обеспечения модульности
-- **Интерфейсы**: `IAnalyzer`, `IBacktester`, `IDataCache`
+### `docs/adr/`
 
-### Utils модули (`utils/`)
+- Долговечные архитектурные решения более высокого authority уровня.
+- Эти документы не стоит переписывать ради status-sync, если конфликтов с текущим approved MVP нет.
 
-#### `validate_arbitrage.py`
-- **Назначение**: Комплексная валидация системы арбитража
-- **Функции**:
-  - Загрузка и проверка тестовых данных
-  - Запуск бэктестинга
-  - Валидация результатов
-  - Генерация отчетов
+### `tests/`
 
-**Запуск валидации:**
-```bash
-python utils/validate_arbitrage.py
-```
+- Проверки для legacy и нового shell-кода.
+- Основные тестовые срезы уже отражают contracts, adapter, runtime, replay и read-only smoke helpers.
 
-### Документация (`docs/`)
+### `ops/`
 
-- `project_structure.md` - структура проекта
-- `validation_fixes.md` - документация исправлений ошибок валидации
+- Пока содержит только env-примеры для `local-dev` и `single-host-prod-like`.
+- Более широкие runbooks и wiring для deployment profiles остаются следующим workstream, а не завершенной частью структуры.
 
-## Принципы организации
+### `data/` и `notebooks/`
 
-### 1. Модульность
-- Каждый модуль имеет четко определенную ответственность
-- Минимальные зависимости между модулями
-- Использование интерфейсов для абстракции
+- `data/` хранит локальные артефакты и датасеты.
+- `notebooks/` остается исследовательским контуром и не считается authority source для runtime semantics.
 
-### 2. Разделение утилит
-- Все вспомогательные скрипты размещаются в `utils/`
-- Основная бизнес-логика остается в `core/`
-- Четкое разделение между библиотечным кодом и скриптами
+## Что важно помнить при навигации
 
-### 3. Управление зависимостями
-- Использование `uv` для управления зависимостями
-- Зафиксированные версии в `uv.lock`
-- Python 3.13 как целевая версия
-
-### 4. Тестирование
-- Модульные тесты в директории `tests/`
-- Интеграционные тесты через скрипты валидации
-- Тестовые данные в `tests/fixtures/`
-
-## Рекомендации по разработке
-
-### Добавление новых утилит
-1. Создать скрипт в директории `utils/`
-2. Использовать правильные импорты:
-   ```python
-   from pathlib import Path
-   project_root = Path(__file__).parent.parent
-   sys.path.insert(0, str(project_root))
-   ```
-3. Добавить документацию в `utils/__init__.py`
-
-### Расширение core модулей
-1. Следовать принципам SOLID
-2. Использовать интерфейсы из `interfaces.py`
-3. Добавлять соответствующие тесты
-4. Обновлять документацию
-
-### Работа с данными
-1. Использовать `DataManager` для загрузки данных
-2. Кэшировать обработанные данные
-3. Документировать формат и источники данных
-
-## История изменений
-
-### 27 сентября 2025
-- Создана директория `utils/` для вспомогательных скриптов
-- Перемещен `validate_arbitrage.py` из корня в `utils/`
-- Исправлены импорты для работы из новой локации
-- Обновлена документация структуры проекта
+1. Для текущего execution backlog сначала читать `docs/README.md`, затем активный `design spec` и `implementation plan`.
+2. Если задача меняет контракты, boundaries или runtime semantics, сначала обновляется docs/governance-слой.
+3. `core/` и `statarb/` не следует смешивать в одном новом архитектурном срезе без явного migration reason.
+4. Internal UI еще не является активным центром работы; до появления этого среза отсутствие `apps/` в репозитории нормально.

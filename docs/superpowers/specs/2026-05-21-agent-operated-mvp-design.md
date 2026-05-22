@@ -1,6 +1,6 @@
 # Дизайн agent-operated MVP
 
-- Статус: draft for review
+- Статус: accepted working baseline
 - Дата: 2026-05-21
 
 ## Контекст и проблема
