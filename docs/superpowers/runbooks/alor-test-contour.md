@@ -42,6 +42,12 @@ ALOR_TEST_PORTFOLIO=replace-me
 
 Дополнительно в репозитории уже существуют live-oriented имена `ALOR_LIVE_REFRESH_TOKEN` и `ALOR_LIVE_PORTFOLIO`, но они не должны использоваться для test contour smoke-check. Доступ к live по-прежнему отделен от test и требует отдельного enablement.
 
+Уточнение по safe read-only smoke:
+
+- `ALOR_TEST_REFRESH_TOKEN` обязателен всегда;
+- `ALOR_TEST_PORTFOLIO` обязателен только для portfolio-scoped surfaces под `/md/v2/Clients/...` и для `ws_portfolio` subscriptions;
+- если `ALOR_TEST_PORTFOLIO` не задан, helper может выполнить только public-only partial smoke.
+
 Операционное правило:
 
 - хранить в `.env` только `Refresh Token`;
@@ -63,6 +69,7 @@ ALOR_TEST_PORTFOLIO=replace-me
 - `Access Token` живет `30 минут`.
 - Он получается через auth host test contour и используется для HTTP и WebSocket операций.
 - Жизненный цикл access token должен управляться отдельным `token refresh manager`.
+- Для `POST /refresh` Alor ожидает параметр `token` либо в query string, либо в JSON body; ключ `refreshToken` для этого exchange использовать нельзя.
 
 Рекомендуемая политика для MVP:
 
@@ -189,9 +196,10 @@ uv run python -m statarb.runtime.alor_test_read_only plan --env-file .env
 
 Что делает `plan`:
 
-- читает `ALOR_CONTOUR`, `ALOR_TEST_REFRESH_TOKEN` и `ALOR_TEST_PORTFOLIO` из `.env`;
+- читает `ALOR_CONTOUR` и `ALOR_TEST_REFRESH_TOKEN` из `.env`, а `ALOR_TEST_PORTFOLIO` использует только если он задан;
 - валидирует, что выбран именно `test` contour;
-- печатает redacted auth/http/ws plan без сетевых вызовов и без `cws`.
+- без `ALOR_TEST_PORTFOLIO` печатает redacted public-only partial plan;
+- при наличии `ALOR_TEST_PORTFOLIO` печатает полный redacted auth/http/ws plan без сетевых вызовов и без `cws`.
 
 Реальный read-only smoke после заполнения `.env`:
 
@@ -202,7 +210,8 @@ uv run python -m statarb.runtime.alor_test_read_only smoke --env-file .env
 Что делает `smoke`:
 
 - выполняет `refresh -> access token` exchange;
-- делает только read-only HTTP запросы `positions`, `summary`, `orders`, `trades`;
+- без `ALOR_TEST_PORTFOLIO` делает только public `GET /md/v2/Securities` probe и не строит `ws_portfolio` envelopes;
+- при наличии `ALOR_TEST_PORTFOLIO` делает read-only HTTP запросы `positions`, `summary`, `orders`, `trades`;
 - печатает HTTP payloads и redacted `ws` subscription envelopes для следующего ручного шага;
 - не поднимает `cws` и не содержит order placement / cancel surfaces.
 
@@ -217,14 +226,15 @@ uv run python -m statarb.runtime.alor_test_read_only smoke --env-file .env --ski
 Минимальный набор:
 
 1. Валидный test contour `Refresh Token`.
-2. Идентификатор test portfolio для этого токена.
+2. Идентификатор test portfolio для этого токена, если нужен доступ к portfolio/order/trade surfaces.
 3. Подтверждение, что `.env` допустим как временное хранилище секрета на этапе MVP.
 4. Окно времени, когда test contour доступен и не находится на технических работах.
 5. Небольшой список инструментов для smoke-check read-only подписок.
 
 Практически это означает:
 
-- заполнить `.env` значениями `ALOR_CONTOUR=test`, `ALOR_TEST_REFRESH_TOKEN=...`, `ALOR_TEST_PORTFOLIO=...`;
+- заполнить `.env` как минимум значениями `ALOR_CONTOUR=test`, `ALOR_TEST_REFRESH_TOKEN=...`;
+- добавить `ALOR_TEST_PORTFOLIO=...`, если нужен portfolio-scoped smoke по `/md/v2/Clients/...` и `ws_portfolio`;
 - помнить, что выпуск нового refresh token инвалидирует предыдущий;
 - заранее определить 1-3 инструмента для проверки market-data;
 - не ожидать совпадения test behavior с реальным биржевым днем;

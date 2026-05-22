@@ -46,10 +46,7 @@ def test_token_manager_builds_refresh_request_for_selected_contour() -> None:
     assert request.method == "POST"
     assert request.url == "https://oauthdev.alor.ru/refresh"
     assert request.headers == {"Content-Type": "application/json"}
-    assert request.json_body == {
-        "refreshToken": "refresh-token",
-        "clientName": "adapter-smoke-check",
-    }
+    assert request.json_body == {"token": "refresh-token"}
 
 
 def test_token_manager_uses_proactive_refresh_threshold() -> None:

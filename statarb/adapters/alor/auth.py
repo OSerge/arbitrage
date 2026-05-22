@@ -97,14 +97,11 @@ class TokenLifecycleManager:
         return self._current_token
 
     def build_refresh_request(self) -> TokenExchangeRequest:
-        json_body = {"refreshToken": self.config.refresh_token}
-        if self.config.client_name is not None:
-            json_body["clientName"] = self.config.client_name
         return TokenExchangeRequest(
             method="POST",
             url=self.endpoints.build_auth_url("/refresh"),
             headers={"Content-Type": "application/json"},
-            json_body=json_body,
+            json_body={"token": self.config.refresh_token},
         )
 
     def store_access_token(self, token: AccessToken) -> AccessToken:

@@ -11,7 +11,11 @@ from typing import Any, Protocol
 import requests
 
 from statarb.adapters.alor.auth import AlorAuthConfig, TokenExchangeRequest, TokenLifecycleManager
-from statarb.adapters.alor.http_market_data import AlorObjectFormat, HttpRequestShape
+from statarb.adapters.alor.http_market_data import (
+    AlorObjectFormat,
+    HttpRequestShape,
+    SecuritiesCatalogRequest,
+)
 from statarb.adapters.alor.http_portfolio import (
     PortfolioOrdersRequest,
     PortfolioPositionsRequest,
@@ -30,6 +34,7 @@ ACCESS_TOKEN_PLACEHOLDER = "<ACCESS_TOKEN>"
 REFRESH_TOKEN_PLACEHOLDER = "<REFRESH_TOKEN>"
 DEFAULT_TIMEOUT_SECONDS = 10.0
 DEFAULT_CLIENT_NAME = "statarb-read-only-smoke"
+PARTIAL_PUBLIC_SECURITIES_LIMIT = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,17 +139,19 @@ class ExecutedHttpSurface:
 class ReadOnlySmokePlan:
     contour: AlorContour
     exchange: str
-    portfolio: str
+    portfolio: str | None
     auth_request: TokenExchangeRequest
     http_surfaces: tuple[PlannedHttpSurface, ...]
     ws_surfaces: tuple[PlannedWsSurface, ...]
 
     def to_dict(self) -> dict[str, object]:
+        smoke_scope = "portfolio_scoped" if self.portfolio else "public_only"
         return {
             "command_path": False,
             "contour": self.contour.value,
             "exchange": self.exchange,
             "portfolio": self.portfolio,
+            "smoke_scope": smoke_scope,
             "auth": {
                 "method": self.auth_request.method,
                 "url": self.auth_request.url,
@@ -195,11 +202,11 @@ def build_read_only_smoke_plan(
     return ReadOnlySmokePlan(
         contour=settings.alor.contour,
         exchange=exchange,
-        portfolio=settings.alor.portfolio or "",
+        portfolio=settings.alor.portfolio,
         auth_request=token_manager.build_refresh_request(),
         http_surfaces=_build_http_surfaces(
             contour=settings.alor.contour,
-            portfolio=settings.alor.portfolio or "",
+            portfolio=settings.alor.portfolio,
             exchange=exchange,
             access_token=ACCESS_TOKEN_PLACEHOLDER,
             object_format=object_format,
@@ -210,7 +217,7 @@ def build_read_only_smoke_plan(
         ),
         ws_surfaces=_build_ws_surfaces(
             contour=settings.alor.contour,
-            portfolio=settings.alor.portfolio or "",
+            portfolio=settings.alor.portfolio,
             exchange=exchange,
             access_token=ACCESS_TOKEN_PLACEHOLDER,
             include_orders=include_orders,
@@ -245,7 +252,7 @@ def run_read_only_smoke(
     access_token = token_manager.accept_exchange_payload(auth_payload, now=issued_at)
     http_surfaces = _build_http_surfaces(
         contour=settings.alor.contour,
-        portfolio=settings.alor.portfolio or "",
+        portfolio=settings.alor.portfolio,
         exchange=exchange,
         access_token=access_token.value,
         object_format=object_format,
@@ -327,13 +334,25 @@ def main(
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m statarb.runtime.alor_test_read_only",
-        description="Prepare or run a safe read-only Alor test contour smoke-check.",
+        description=(
+            "Prepare or run a safe read-only Alor test contour smoke-check. "
+            "Without a configured portfolio, the helper falls back to a public-only partial smoke."
+        ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
-    plan = subparsers.add_parser("plan", help="Print the read-only auth/http/ws plan without network I/O.")
+    plan = subparsers.add_parser(
+        "plan",
+        help=(
+            "Print the read-only auth/http/ws plan without network I/O. "
+            "Without portfolio, prints a public-only partial plan."
+        ),
+    )
     smoke = subparsers.add_parser(
         "smoke",
-        help="Refresh an access token and execute read-only HTTP account requests.",
+        help=(
+            "Refresh an access token and execute read-only HTTP requests. "
+            "Without portfolio, only the public securities probe is executed."
+        ),
     )
     for command in (plan, smoke):
         command.add_argument("--env-file")
@@ -355,7 +374,7 @@ def _build_parser() -> argparse.ArgumentParser:
 def _build_http_surfaces(
     *,
     contour: AlorContour,
-    portfolio: str,
+    portfolio: str | None,
     exchange: str,
     access_token: str,
     object_format: AlorObjectFormat | str,
@@ -364,6 +383,17 @@ def _build_http_surfaces(
     with_repo: bool,
     without_currency: bool,
 ) -> tuple[PlannedHttpSurface, ...]:
+    if portfolio is None:
+        return (
+            PlannedHttpSurface(
+                surface="securities",
+                request=SecuritiesCatalogRequest(
+                    exchange=exchange,
+                    limit=PARTIAL_PUBLIC_SECURITIES_LIMIT,
+                    format=object_format,
+                ).to_http_request(contour=contour, access_token=None),
+            ),
+        )
     surfaces = [
         PlannedHttpSurface(
             surface="positions",
@@ -412,7 +442,7 @@ def _build_http_surfaces(
 def _build_ws_surfaces(
     *,
     contour: AlorContour,
-    portfolio: str,
+    portfolio: str | None,
     exchange: str,
     access_token: str,
     include_orders: bool,
@@ -420,6 +450,8 @@ def _build_ws_surfaces(
     skip_history: bool,
     with_repo: bool,
 ) -> tuple[PlannedWsSurface, ...]:
+    if portfolio is None:
+        return ()
     ws_url = "wss://apidev.alor.ru/ws" if contour is AlorContour.TEST else "wss://api.alor.ru/ws"
     surfaces = [
         PlannedWsSurface(
@@ -484,6 +516,8 @@ def _decode_json_payload(response: requests.Response) -> Any:
 
 def _redact_refresh_body(payload: Mapping[str, str]) -> dict[str, str]:
     redacted = dict(payload)
+    if "token" in redacted:
+        redacted["token"] = REFRESH_TOKEN_PLACEHOLDER
     if "refreshToken" in redacted:
         redacted["refreshToken"] = REFRESH_TOKEN_PLACEHOLDER
     return redacted
@@ -492,9 +526,9 @@ def _redact_refresh_body(payload: Mapping[str, str]) -> dict[str, str]:
 def _require_test_read_only_settings(settings: RuntimeSettings) -> None:
     if settings.alor.contour is not AlorContour.TEST:
         raise ValueError("Alor read-only smoke is limited to the test contour.")
-    if not settings.alor.is_configured:
+    if settings.alor.refresh_token is None:
         raise ValueError(
-            "Alor read-only smoke requires a refresh token and portfolio to be configured."
+            "Alor read-only smoke requires a refresh token. Portfolio is optional only for the public-only partial smoke."
         )
 
 
