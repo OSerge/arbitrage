@@ -62,6 +62,45 @@ ALOR_TEST_PORTFOLIO=replace-me
 - `Access Token` получать и ротировать runtime-менеджером;
 - не прошивать access token в код, docs или постоянные конфиги.
 
+## Portfolio resolution policy
+
+Официальный `Alor` API **не предоставляет** supported endpoint для создания portfolio в test contour и **не определяет** правило выбора «правильного» portfolio, если в JWT несколько кандидатов.
+
+### Что говорит официальная документация
+
+- test trading account и список portfolios **выдаются/меняются вне API** через `support@alor.ru`, личный кабинет или `openapi@alor.ru` ([dev-env quick start](https://alor.dev/docs/en/api/quick-start/dev-env), [OpenAPI description](https://alor.dev/rawdocs2/WarpOpenAPIv2.yml));
+- test account **не персонализирован** и может быть shared между несколькими API-пользователями ([dev-env auth](https://alor.dev/docs/en/api/access/authorization/dev-env-auth));
+- **единственный documented способ получить список portfolios программно** — декодировать JWT access token и прочитать claim `portfolios` ([OpenAPI description](https://alor.dev/rawdocs2/WarpOpenAPIv2.yml), [access token docs](https://alor.dev/docs/en/api/access/authorization/access-token));
+- portfolio-scoped endpoints требуют явный `{portfolio}` path segment; auto-selection между несколькими валидными portfolio ids **не документирован**.
+
+### Проектная политика (deterministic, fail-fast)
+
+1. **Selection = explicit-only.** Для portfolio-scoped surfaces runtime использует только `ALOR_TEST_PORTFOLIO` / `ALOR_LIVE_PORTFOLIO`. Автовыбор по probe/heuristic запрещён как финальная политика.
+2. **Discovery = JWT-only helper.** Список кандидатов можно получить из JWT claim `portfolios`, но это discovery, а не selection.
+3. **Validation перед smoke.** Если `ALOR_TEST_PORTFOLIO` задан, он должен присутствовать в JWT claim текущего refresh token; иначе fail-fast.
+4. **Shared test account.** Если в JWT несколько portfolios и все отвечают на read-only probes, оператор обязан явно выбрать один id и зафиксировать его в `.env`; проект не выбирает «лучший» portfolio сам.
+
+### Operator commands
+
+Показать portfolios из JWT текущего refresh token:
+
+```bash
+uv run python -m statarb.runtime.alor_portfolio_resolve list-jwt --env-file .env
+```
+
+Проверить, что `ALOR_TEST_PORTFOLIO` присутствует в JWT claim:
+
+```bash
+uv run python -m statarb.runtime.alor_portfolio_resolve validate --env-file .env
+```
+
+Рекомендуемый порядок перед portfolio-scoped smoke:
+
+1. `list-jwt` — получить documented candidate list;
+2. оператор выбирает portfolio id и записывает его в `ALOR_TEST_PORTFOLIO`;
+3. `validate` — fail-fast проверка соответствия env и JWT;
+4. `uv run python -m statarb.runtime.alor_test_read_only smoke --env-file .env`.
+
 ## Auth lifecycle
 
 ### 1. Refresh token
@@ -285,4 +324,5 @@ uv run python -m statarb.runtime.alor_test_read_only smoke --env-file .env --ski
 - `https://alor.dev/docs/en/api/access/authorization/dev-env-auth`
 - `https://alor.dev/docs/en/api/usage/limits-and-recommendations`
 - `https://alor.dev/docs/en/api/websocket/data-subscriptions/overview`
-- `https://alor.dev/docs/en/api/usage/orders/overview`
+- `https://alor.dev/docs/en/api/access/authorization/access-token`
+- `https://alor.dev/rawdocs2/WarpOpenAPIv2.yml`

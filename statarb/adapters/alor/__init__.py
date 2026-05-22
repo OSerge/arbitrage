@@ -44,6 +44,13 @@ from statarb.adapters.alor.http_portfolio import (
     PortfolioSummaryRequest,
     PortfolioTradesRequest,
 )
+from statarb.adapters.alor.jwt_portfolios import (
+    AlorJwtPortfolioError,
+    decode_jwt_payload,
+    extract_portfolios_from_payload,
+    parse_jwt_portfolios,
+    resolve_configured_portfolio,
+)
 from statarb.adapters.alor.mapper import (
     AlorPayloadMapper,
     CanonicalEventKind,
@@ -83,8 +90,11 @@ __all__ = [
     "CwsAuthorizeRequest",
     "CwsCommandEnvelope",
     "GuidFactory",
+    "decode_jwt_payload",
+    "extract_portfolios_from_payload",
     "HistoricalBarsRequest",
     "HttpRequestShape",
+    "AlorJwtPortfolioError",
     "LIVE_ENDPOINT_CATALOG",
     "MappingResult",
     "MappingStatus",
@@ -114,6 +124,8 @@ __all__ = [
     "normalize_history_response",
     "normalize_quotes_response",
     "normalize_securities_response",
+    "parse_jwt_portfolios",
     "recommended_history_storage_layout",
+    "resolve_configured_portfolio",
     "recommended_snapshot_storage_layout",
 ]
