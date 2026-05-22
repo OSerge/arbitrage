@@ -299,7 +299,7 @@ uv run python -m statarb.runtime.alor_test_read_only smoke --env-file .env --ski
   - `GET .../Clients/MOEX/D00014/trades` -> HTTP `200`, empty array;
   - `ws_portfolio` envelopes построены (redacted), но live WS session не открывался;
   - `cws`/command path не выполнялся.
-- Вердict: portfolio-scoped read-only smoke прошел; portfolio HTTP surfaces подтверждены на реальном test contour.
+- Вердикт: portfolio-scoped read-only smoke прошел; portfolio HTTP surfaces подтверждены на реальном test contour.
 
 ### Следующий ожидаемый шаг
 
