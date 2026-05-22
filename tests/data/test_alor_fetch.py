@@ -126,6 +126,8 @@ def test_main_history_command_prints_dataset_summary(tmp_path, capsys) -> None:
             "SBER",
             "--exchange",
             "MOEX",
+            "--instrument-group",
+            "TQBR",
             "--timeframe",
             "D",
             "--from",
@@ -188,6 +190,110 @@ def test_main_securities_command_prints_dataset_summary(tmp_path, capsys) -> Non
     assert summary["row_count"] == 1
     assert summary["symbol_count"] == 1
     assert summary["storage_uri"].endswith("/request_id=securities-cli-001/part-00000.parquet")
+
+
+def test_main_history_command_resolves_instrument_group_from_local_snapshots(
+    tmp_path,
+    capsys,
+) -> None:
+    observed_at = datetime(2026, 5, 21, 12, 0, tzinfo=UTC)
+    securities_payload = [
+        {
+            "symbol": "SBER",
+            "exchange": "MOEX",
+            "market": "FOND",
+            "board": "SMAL",
+            "primaryBoard": "TQBR",
+            "type": "Stock",
+            "shortName": "Sberbank",
+        }
+    ]
+    available_boards_payload = [
+        {
+            "board": "TQBR",
+            "primaryBoard": "TQBR",
+            "instrumentGroup": "TQBR",
+            "isPrimary": True,
+        }
+    ]
+
+    securities_raw = persist_raw_alor_payload(
+        storage_root=tmp_path,
+        relative_uri=(
+            "data/raw/vendor=alor/dataset=instruments/load_date=2026-05-21/request_id=history-securities/response.json.gz"
+        ),
+        payload=securities_payload,
+    )
+    write_security_snapshot_dataset(
+        storage_root=tmp_path,
+        records=normalize_securities_response(securities_payload),
+        observed_at_utc=observed_at,
+        request_id="history-securities",
+        raw_storage_uri=securities_raw.storage_uri,
+        request_params={"query": "SBER", "exchange": "MOEX"},
+    )
+
+    boards_raw = persist_raw_alor_payload(
+        storage_root=tmp_path,
+        relative_uri=(
+            "data/raw/vendor=alor/dataset=available_boards/load_date=2026-05-21/request_id=history-boards/response.json.gz"
+        ),
+        payload=available_boards_payload,
+    )
+    write_available_boards_dataset(
+        storage_root=tmp_path,
+        records=normalize_available_boards_response(
+            available_boards_payload,
+            request=AvailableBoardsRequest(exchange="MOEX", symbol="SBER"),
+        ),
+        observed_at_utc=observed_at,
+        request_id="history-boards",
+        raw_storage_uri=boards_raw.storage_uri,
+        request_params={"exchange": "MOEX", "symbol": "SBER"},
+    )
+
+    client = StubHttpClient(
+        {
+            "history": [
+                {
+                    "time": 1704067200,
+                    "open": 300.0,
+                    "high": 301.0,
+                    "low": 299.5,
+                    "close": 300.5,
+                    "volume": 1000,
+                }
+            ]
+        }
+    )
+
+    exit_code = main(
+        [
+            "history",
+            "--symbol",
+            "SBER",
+            "--exchange",
+            "MOEX",
+            "--timeframe",
+            "D",
+            "--from",
+            "2024-01-01T00:00:00Z",
+            "--to",
+            "2024-01-02T00:00:00Z",
+            "--storage-root",
+            str(tmp_path),
+            "--request-id",
+            "cli-enriched-001",
+            "--contour",
+            "live",
+        ],
+        http_client=client,
+    )
+
+    assert exit_code == 0
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["instrument_group"] == "TQBR"
+    assert client.calls[0][0].params["instrumentGroup"] == "TQBR"
 
 
 def test_main_resolve_symbol_command_prints_preferred_board(tmp_path, capsys) -> None:

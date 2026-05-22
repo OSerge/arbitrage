@@ -42,6 +42,7 @@
 - deterministic `paper/replay` runtime и historical smoke path;
 - canonical bootstrap path от normalized `Alor` dataset с сохранением legacy fallback;
 - safe read-only slice для `Alor` test contour: auth refresh/access, private read-only HTTP surfaces, redacted WS plan и ручной `smoke` helper;
+- enrichment-aware `history` fetch и `pair-bootstrap`: `instrument_group` резолвится из локальных `Securities`/`availableBoards` snapshots, если не передан явно;
 - корректный refresh contract с параметром `token`, а не со старым shape;
 - public-only partial smoke path без `ALOR_TEST_PORTFOLIO` как допустимый безопасный первый шаг;
 - явное разделение: portfolio-scoped read-only surfaces требуют `ALOR_TEST_PORTFOLIO`, а `cws`/live остаются отдельными шагами.
@@ -50,7 +51,6 @@
 
 - реальный ручной `Alor` `test` contour smoke через локальный `.env` еще не зафиксирован как выполненный;
 - portfolio-scoped read-only smoke остается отдельным ручным шагом после получения `ALOR_TEST_PORTFOLIO`;
-- `Securities/availableBoards` enrichment еще не встроен до конца в `fetch/bootstrap` путь;
 - mapper/read-model/operator workflows еще не доведены до следующего checkpoint;
 - расширение `.env`/profile/live-related contour остается follow-up workstream, а не частью текущего safe smoke.
 
@@ -60,9 +60,8 @@
 
 1. вручную прогнать public-only partial `Alor` `test` contour smoke через `.env` без `ALOR_TEST_PORTFOLIO`, чтобы подтвердить refresh/access exchange и базовый read-only probe;
 2. при наличии `ALOR_TEST_PORTFOLIO` отдельно прогнать portfolio-scoped read-only smoke для `/md/v2/Clients/...` и `ws_portfolio`-ориентированных surfaces;
-3. связать `Securities/availableBoards enrichment` с `fetch/bootstrap` flow, чтобы `instrument_group` и `board` выбирались не вручную, а из локального `Alor`-ориентированного reference slice;
-4. затем перейти к более полному adapter mapping из test contour payloads в canonical contracts и к первым read-model/operator workflows;
-5. только после этого возвращаться к более широким `.env`/profile/live-extension шагам и UI slice.
+3. перейти к более полному adapter mapping из test contour payloads в canonical contracts и к первым read-model/operator workflows;
+4. только после этого возвращаться к более широким `.env`/profile/live-extension шагам и UI slice.
 
 ### Правило handoff
 
@@ -570,7 +569,7 @@
 - `Phase 1` и `Phase 2` по сути закрыты; `Phase 3` собран до safe read-only smoke gate; core `Phase 4` выполнена; config-basis `Phase 6` уже есть.
 - Начинать не с переосмысления foundation, а с ближайшего открытого шага: ручной public-only partial `Alor test contour` smoke через `.env`.
 - Если есть `ALOR_TEST_PORTFOLIO`, следующим шагом идет portfolio-scoped read-only smoke для `/md/v2/Clients/...` и `ws_portfolio`.
-- После smoke идти в `enrichment-aware fetch/bootstrap helper`, затем в canonical mapper hardening и первые read-model/operator workflows.
+- После smoke идти в canonical mapper hardening и первые read-model/operator workflows.
 - Более широкие `.env`/profile/live-extension шаги считать отдельным follow-up, а не implicit продолжением safe smoke.
 - Не перескакивать сразу к `UI` или `live`.
 - После каждого phase gate делать review against this plan и contracts.

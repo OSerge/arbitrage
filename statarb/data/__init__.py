@@ -18,7 +18,11 @@ from statarb.data.alor_discovery import (
     find_latest_history_dataset_manifest,
 )
 from statarb.data.alor_history import LoadedAlorHistoryBarsDataset, load_history_bars_dataset
-from statarb.data.alor_reference import AlorSymbolBoardEnrichment, resolve_symbol_board_enrichment
+from statarb.data.alor_reference import (
+    AlorSymbolBoardEnrichment,
+    require_symbol_board_enrichment,
+    resolve_symbol_board_enrichment,
+)
 
 __all__ = [
     "ALOR_MARKET_DATA_CONTRACT_VERSION",
@@ -42,6 +46,7 @@ __all__ = [
     "ingest_history_payload",
     "load_history_bars_dataset",
     "persist_raw_alor_payload",
+    "require_symbol_board_enrichment",
     "resolve_symbol_board_enrichment",
     "write_history_bars_dataset",
     "write_quote_snapshot_dataset",

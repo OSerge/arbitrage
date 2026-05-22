@@ -20,7 +20,7 @@ from statarb.adapters.alor.http_market_data import (
 )
 from statarb.config import AlorContour
 from statarb.data.alor_discovery import discover_history_dataset_manifests, find_latest_history_dataset_manifest
-from statarb.data.alor_reference import resolve_symbol_board_enrichment
+from statarb.data.alor_reference import require_symbol_board_enrichment, resolve_symbol_board_enrichment
 from statarb.data.alor_storage import (
     StoredDatasetBatch,
     ingest_available_boards_payload,
@@ -213,10 +213,16 @@ def main(argv: list[str] | None = None, *, http_client: AlorHttpClient | None = 
     parser = _build_parser()
     args = parser.parse_args(argv)
     if args.command == "history":
+        instrument_group = _resolve_history_instrument_group(
+            storage_root=Path(args.storage_root),
+            symbol=args.symbol,
+            exchange=args.exchange,
+            instrument_group=_optional_cli_text(args.instrument_group),
+        )
         request = HistoricalBarsRequest(
             symbol=args.symbol,
             exchange=args.exchange,
-            instrument_group=args.instrument_group,
+            instrument_group=instrument_group,
             tf=args.timeframe,
             from_time=_parse_cli_timestamp(args.from_time),
             to_time=_parse_cli_timestamp(args.to_time),
@@ -237,6 +243,7 @@ def main(argv: list[str] | None = None, *, http_client: AlorHttpClient | None = 
             {
                 "contour": AlorContour.coerce(args.contour).value,
                 "dataset_id": result.batch.manifest.dataset_id,
+                "instrument_group": request.instrument_group,
                 "manifest_uri": result.batch.manifest_uri,
                 "raw_storage_uri": result.batch.raw_artifact.storage_uri,
                 "row_count": result.batch.manifest.row_count,
@@ -513,6 +520,23 @@ def _optional_cli_text(value: str | None) -> str | None:
         return None
     stripped = value.strip()
     return stripped or None
+
+
+def _resolve_history_instrument_group(
+    *,
+    storage_root: Path,
+    symbol: str,
+    exchange: str,
+    instrument_group: str | None,
+) -> str:
+    if instrument_group is not None:
+        return instrument_group
+    enrichment = require_symbol_board_enrichment(
+        storage_root=storage_root,
+        symbol=symbol,
+        exchange=exchange,
+    )
+    return enrichment.preferred_instrument_group
 
 
 def _print_summary(payload: object) -> None:

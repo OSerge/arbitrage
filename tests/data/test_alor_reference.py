@@ -2,17 +2,28 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
+
 from statarb.adapters.alor.http_market_data import (
     AvailableBoardsRequest,
     normalize_available_boards_response,
     normalize_securities_response,
 )
-from statarb.data.alor_reference import resolve_symbol_board_enrichment
+from statarb.data.alor_reference import require_symbol_board_enrichment, resolve_symbol_board_enrichment
 from statarb.data.alor_storage import (
     persist_raw_alor_payload,
     write_available_boards_dataset,
     write_security_snapshot_dataset,
 )
+
+
+def test_require_symbol_board_enrichment_raises_when_snapshots_missing(tmp_path) -> None:
+    with pytest.raises(FileNotFoundError, match="No local Alor enrichment snapshots found"):
+        require_symbol_board_enrichment(
+            storage_root=tmp_path,
+            symbol="SBER",
+            exchange="MOEX",
+        )
 
 
 def test_resolve_symbol_board_enrichment_prefers_primary_board_from_local_snapshots(tmp_path) -> None:

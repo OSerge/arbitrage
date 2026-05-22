@@ -7,6 +7,7 @@ from typing import Any
 from statarb.bridges.historical import HistoricalSmokeBundle, build_historical_pair_bridge_from_alor_datasets
 from statarb.data.alor_discovery import find_latest_history_dataset_manifest
 from statarb.data.alor_history import LoadedAlorHistoryBarsDataset, load_history_bars_dataset
+from statarb.data.alor_reference import require_symbol_board_enrichment
 from statarb.domain import InstrumentType
 from statarb.runtime.historical import HistoricalPaperReplaySmokeResult, run_historical_paper_replay_smoke
 
@@ -17,6 +18,8 @@ class PairBootstrapResult:
     right_manifest_path: Path
     left_dataset: LoadedAlorHistoryBarsDataset
     right_dataset: LoadedAlorHistoryBarsDataset
+    left_instrument_group: str | None
+    right_instrument_group: str | None
     bundle: HistoricalSmokeBundle
     smoke_result: HistoricalPaperReplaySmokeResult | None
 
@@ -25,11 +28,13 @@ class PairBootstrapResult:
             "as_of_utc": self.bundle.as_of.isoformat(),
             "exchange": self.left_dataset.records[0].exchange,
             "left_dataset_id": self.left_dataset.manifest.dataset_id,
+            "left_instrument_group": self.left_instrument_group,
             "left_manifest_path": str(self.left_manifest_path),
             "left_storage_uri": self.left_dataset.normalized_artifact.storage_uri,
             "pair": list(self.bundle.source_pair),
             "research_run_id": self.bundle.research_run.run_id,
             "right_dataset_id": self.right_dataset.manifest.dataset_id,
+            "right_instrument_group": self.right_instrument_group,
             "right_manifest_path": str(self.right_manifest_path),
             "right_storage_uri": self.right_dataset.normalized_artifact.storage_uri,
             "signal": self.bundle.source_signal,
@@ -72,7 +77,7 @@ def run_alor_pair_bootstrap(
     run_smoke: bool = True,
 ) -> PairBootstrapResult:
     resolved_storage_root = Path(storage_root)
-    resolved_left_manifest_path = _resolve_manifest_path(
+    resolved_left_manifest_path, resolved_left_instrument_group = _resolve_manifest_path(
         storage_root=resolved_storage_root,
         symbol=left_symbol,
         exchange=exchange,
@@ -82,7 +87,7 @@ def run_alor_pair_bootstrap(
         to_time=to_time,
         manifest_path=left_manifest_path,
     )
-    resolved_right_manifest_path = _resolve_manifest_path(
+    resolved_right_manifest_path, resolved_right_instrument_group = _resolve_manifest_path(
         storage_root=resolved_storage_root,
         symbol=right_symbol,
         exchange=exchange,
@@ -127,6 +132,8 @@ def run_alor_pair_bootstrap(
         right_manifest_path=resolved_right_manifest_path,
         left_dataset=left_dataset,
         right_dataset=right_dataset,
+        left_instrument_group=resolved_left_instrument_group,
+        right_instrument_group=resolved_right_instrument_group,
         bundle=bundle,
         smoke_result=smoke_result,
     )
@@ -142,16 +149,25 @@ def _resolve_manifest_path(
     from_time: int | None,
     to_time: int | None,
     manifest_path: str | Path | None,
-) -> Path:
+) -> tuple[Path, str | None]:
     if manifest_path is not None:
-        return Path(manifest_path)
+        return Path(manifest_path), instrument_group
+
+    resolved_instrument_group = instrument_group
+    if resolved_instrument_group is None:
+        enrichment = require_symbol_board_enrichment(
+            storage_root=storage_root,
+            symbol=symbol,
+            exchange=exchange,
+        )
+        resolved_instrument_group = enrichment.preferred_instrument_group
 
     match = find_latest_history_dataset_manifest(
         storage_root=storage_root,
         symbol=symbol,
         exchange=exchange,
         timeframe=timeframe,
-        instrument_group=instrument_group,
+        instrument_group=resolved_instrument_group,
         from_time=from_time,
         to_time=to_time,
     )
@@ -159,9 +175,9 @@ def _resolve_manifest_path(
         raise FileNotFoundError(
             "No matching Alor history dataset manifest found for "
             f"symbol={symbol!r}, exchange={exchange!r}, timeframe={timeframe!r}, "
-            f"instrument_group={instrument_group!r}, from_time={from_time!r}, to_time={to_time!r}."
+            f"instrument_group={resolved_instrument_group!r}, from_time={from_time!r}, to_time={to_time!r}."
         )
-    return match.manifest_path
+    return match.manifest_path, resolved_instrument_group
 
 
 def _require_symbol_match(

@@ -389,6 +389,7 @@ data/normalized/vendor=alor/dataset=quotes/as_of_date=YYYY-MM-DD/exchange=MOEX/p
 - Для bars всегда сохранять `instrumentGroup`/`board` в manifest, даже если payload его не содержит.
 - Quote datasets считать snapshot-слоем, а не replacement для bar history.
 - Instrument snapshot и `availableBoards` нужно хранить отдельно, чтобы последующий ingestion мог надежно enrich-ить `board` semantics.
+- `history` fetch и `pair-bootstrap` могут резолвить `instrument_group` из latest local `Securities`/`availableBoards` snapshots, если CLI/operator не передал его явно; при отсутствии snapshots helper обязан fail fast с указанием сначала собрать reference slice.
 
 ## Verification
 

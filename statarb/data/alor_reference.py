@@ -43,6 +43,31 @@ class AlorSymbolBoardEnrichment:
         }
 
 
+def require_symbol_board_enrichment(
+    *,
+    storage_root: Path,
+    symbol: str,
+    exchange: str,
+) -> AlorSymbolBoardEnrichment:
+    resolution = resolve_symbol_board_enrichment(
+        storage_root=storage_root,
+        symbol=symbol,
+        exchange=exchange,
+    )
+    if resolution is None:
+        raise FileNotFoundError(
+            "No local Alor enrichment snapshots found for "
+            f"symbol={symbol!r}, exchange={exchange!r}. "
+            "Fetch securities and available-boards snapshots first, or pass instrument_group explicitly."
+        )
+    if resolution.preferred_instrument_group is None:
+        raise ValueError(
+            "Local Alor enrichment snapshots did not resolve a preferred instrument_group for "
+            f"symbol={symbol!r}, exchange={exchange!r}."
+        )
+    return resolution
+
+
 def resolve_symbol_board_enrichment(
     *,
     storage_root: Path,
@@ -270,4 +295,8 @@ def _parse_optional_datetime(value: str | None) -> datetime:
     return parsed.astimezone(UTC)
 
 
-__all__ = ["AlorSymbolBoardEnrichment", "resolve_symbol_board_enrichment"]
+__all__ = [
+    "AlorSymbolBoardEnrichment",
+    "require_symbol_board_enrichment",
+    "resolve_symbol_board_enrichment",
+]

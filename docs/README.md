@@ -12,7 +12,7 @@
 - `core/` как legacy research/prototype contour;
 - `statarb/` как активный platform shell для нового MVP-кода, контрактов-ориентированного runtime и адаптеров.
 
-`Phase 1` и `Phase 2` implementation plan в основном закрыты. Текущий ближайший operational focus: ручной `Alor` `test` contour read-only smoke, затем доработка reference/enrichment wiring, canonical mapping и первых operator/read-model workflows.
+`Phase 1` и `Phase 2` implementation plan в основном закрыты. Текущий ближайший operational focus: ручной `Alor` `test` contour read-only smoke, затем canonical mapping и первые operator/read-model workflows.
 
 ## Что читать в первую очередь
 
@@ -33,15 +33,15 @@
 - historical `paper/replay` contour;
 - `Alor` public data path: fetch -> raw -> normalized `Parquet` -> manifest;
 - safe read-only `Alor` adapter/runtime slice, включая корректный refresh `token` shape;
-- partial public-only smoke path, который может работать без `ALOR_TEST_PORTFOLIO`.
+- partial public-only smoke path, который может работать без `ALOR_TEST_PORTFOLIO`;
+- enrichment-aware `history` fetch и `pair-bootstrap` через локальные `Securities`/`availableBoards` snapshots.
 
 Остаются ближайшими шагами:
 
 1. вручную прогнать `Alor` `test` contour read-only smoke через локальный `.env`;
 2. отдельно пройти portfolio-scoped read-only smoke там, где нужны `/md/v2/Clients/...` и `ws_portfolio` surfaces;
-3. связать `Securities/availableBoards` enrichment с `fetch/bootstrap`;
-4. расширить canonical mapping и первые operator/read-model workflows;
-5. только после этого возвращаться к более широким `.env`/profile/live-extension шагам и UI slice.
+3. расширить canonical mapping и первые operator/read-model workflows;
+4. только после этого возвращаться к более широким `.env`/profile/live-extension шагам и UI slice.
 
 ## Долгоживущая архитектура и более широкий контекст
 
