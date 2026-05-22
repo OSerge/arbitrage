@@ -12,7 +12,7 @@
 - В репозитории уже есть safe helper/runner для `plan` и `smoke` сценариев в рамках read-only `test` contour.
 - Public-only partial smoke допустим без `ALOR_TEST_PORTFOLIO`, если шаг ограничен refresh/access exchange и public probe.
 - `ALOR_TEST_PORTFOLIO` обязателен только там, где нужны portfolio-scoped HTTP surfaces и `ws_portfolio` subscriptions.
-- Реальный ручной smoke через локальный `.env` остается отдельным операторским шагом и не считается автоматически выполненным только потому, что helper уже реализован.
+- Public-only partial smoke против реального test contour выполнен 2026-05-22; portfolio-scoped smoke остается заблокированным до заполнения `ALOR_TEST_PORTFOLIO`.
 - `cws` и любой `live`-related expansion остаются отдельными approval-gated workstreams.
 
 ## Scope и границы решений
@@ -228,6 +228,28 @@ uv run python -m statarb.runtime.alor_test_read_only smoke --env-file .env
 ```bash
 uv run python -m statarb.runtime.alor_test_read_only smoke --env-file .env --skip-orders --skip-trades
 ```
+
+## Smoke execution log
+
+Операторская фиксация фактических проверок test contour. Секреты и access token в этот журнал не записываются.
+
+### 2026-05-22 — public-only partial smoke
+
+- Команда: `uv run python -m statarb.runtime.alor_test_read_only smoke --env-file .env`
+- Contour: `test`
+- Scope: `public_only`
+- Причина partial scope: `ALOR_TEST_PORTFOLIO` присутствует в `.env`, но пустой; helper корректно не строит portfolio-scoped surfaces.
+- Результаты:
+  - `POST https://oauthdev.alor.ru/refresh` -> access token выдан, `expires_in_seconds=1800`;
+  - `GET https://apidev.alor.ru/md/v2/Securities` -> HTTP `200`, получено `3` instrument records в `format=Simple`;
+  - `ws` envelopes не строились;
+  - `cws`/command path не выполнялся.
+- Вердикт: public-only read-only smoke прошел; auth refresh shape и public HTTP probe подтверждены на реальном test contour.
+
+### Следующий ожидаемый шаг
+
+- Заполнить `ALOR_TEST_PORTFOLIO` валидным test portfolio для этого refresh token.
+- Повторить smoke без изменения helper-команды; helper автоматически перейдет в `portfolio_scoped` mode и добавит `/md/v2/Clients/...` surfaces плюс redacted `ws_portfolio` envelopes.
 
 ## Что пользователь должен подготовить перед первой реальной проверкой
 

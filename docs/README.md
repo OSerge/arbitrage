@@ -12,7 +12,7 @@
 - `core/` как legacy research/prototype contour;
 - `statarb/` как активный platform shell для нового MVP-кода, контрактов-ориентированного runtime и адаптеров.
 
-`Phase 1` и `Phase 2` implementation plan в основном закрыты. Текущий ближайший operational focus: ручной `Alor` `test` contour read-only smoke, затем canonical mapping и первые operator/read-model workflows.
+`Phase 1` и `Phase 2` implementation plan в основном закрыты. Текущий operational focus: portfolio-scoped `Alor` read-only smoke после заполнения `ALOR_TEST_PORTFOLIO`, затем canonical mapper hardening на реальных portfolio payloads и первые read-model workflows.
 
 ## Что читать в первую очередь
 
@@ -20,7 +20,8 @@
 - `docs/superpowers/plans/2026-05-21-agent-operated-mvp-implementation-plan.md` — активный phased plan/handoff документ. Здесь фиксируются `done / in progress / next` по текущей ветке.
 - `docs/superpowers/project-map.md` — карта репозитория и граница `core/` vs `statarb/`.
 - `docs/superpowers/approval-matrix.md` — что агент может менять автономно и какие шаги требуют founder approval.
-- `docs/superpowers/runbooks/alor-test-contour.md` — operational runbook по `AlorAPI` test contour, включая правило, где допустим public-only partial smoke без `portfolio`, а где `ALOR_TEST_PORTFOLIO` обязателен.
+- `docs/superpowers/runbooks/alor-test-contour.md` — operational runbook по `AlorAPI` test contour, включая smoke execution log и правило, где допустим public-only partial smoke без `portfolio`, а где `ALOR_TEST_PORTFOLIO` обязателен.
+- `docs/superpowers/runbooks/paper-trading-day.md` — operator workflow для локального historical paper/replay trading day без брокерских соединений.
 - `docs/superpowers/contracts/README.md` — индекс доменных и operational контрактов MVP.
 - `docs/superpowers/contracts/alor-market-data.md` — contract doc по open/public `AlorAPI` market-data surfaces и raw/normalized storage design.
 
@@ -34,14 +35,15 @@
 - `Alor` public data path: fetch -> raw -> normalized `Parquet` -> manifest;
 - safe read-only `Alor` adapter/runtime slice, включая корректный refresh `token` shape;
 - partial public-only smoke path, который может работать без `ALOR_TEST_PORTFOLIO`;
-- enrichment-aware `history` fetch и `pair-bootstrap` через локальные `Securities`/`availableBoards` snapshots.
+- enrichment-aware `history` fetch и `pair-bootstrap` через локальные `Securities`/`availableBoards` snapshots;
+- public-only partial `Alor test contour` smoke выполнен 2026-05-22 и зафиксирован в runbook;
+- operator workflow для historical paper/replay trading day.
 
 Остаются ближайшими шагами:
 
-1. вручную прогнать `Alor` `test` contour read-only smoke через локальный `.env`;
-2. отдельно пройти portfolio-scoped read-only smoke там, где нужны `/md/v2/Clients/...` и `ws_portfolio` surfaces;
-3. расширить canonical mapping и первые operator/read-model workflows;
-4. только после этого возвращаться к более широким `.env`/profile/live-extension шагам и UI slice.
+1. заполнить `ALOR_TEST_PORTFOLIO` и пройти portfolio-scoped read-only smoke для `/md/v2/Clients/...` и `ws_portfolio` surfaces;
+2. расширить canonical mapping на реальные portfolio payloads из test contour;
+3. только после этого возвращаться к более широким `.env`/profile/live-extension шагам и UI slice.
 
 ## Долгоживущая архитектура и более широкий контекст
 

@@ -49,8 +49,8 @@
 
 ### Что сейчас считается незавершенным
 
-- реальный ручной `Alor` `test` contour smoke через локальный `.env` еще не зафиксирован как выполненный;
-- portfolio-scoped read-only smoke остается отдельным ручным шагом после получения `ALOR_TEST_PORTFOLIO`;
+- public-only partial `Alor` `test` contour smoke через локальный `.env` выполнен 2026-05-22 и зафиксирован в runbook;
+- portfolio-scoped read-only smoke остается отдельным ручным шагом: `ALOR_TEST_PORTFOLIO` в `.env` пока пустой;
 - mapper/read-model/operator workflows еще не доведены до следующего checkpoint;
 - расширение `.env`/profile/live-related contour остается follow-up workstream, а не частью текущего safe smoke.
 
@@ -376,7 +376,7 @@
 - [x] Добавить canonical mapper для orders/fills/positions/account state.
 - [x] Подготовить `cws` command skeleton без включения real trading path.
 - [x] Подготовить helper, который поддерживает public-only partial smoke без `ALOR_TEST_PORTFOLIO`.
-- [ ] Выполнить ручной public-only partial smoke против test contour через `.env`.
+- [x] Выполнить ручной public-only partial smoke против test contour через `.env`.
 - [ ] Выполнить portfolio-scoped read-only smoke при наличии `ALOR_TEST_PORTFOLIO`.
 
 ### Phase 4: Paper/replay runtime
@@ -428,7 +428,7 @@
 - [x] Добавить explicit risk checks и paper ledger.
 - [x] Реализовать event sink и replay loader.
 - [x] Зафиксировать replay parity tests.
-- [ ] Подготовить короткий operator workflow для paper trading day.
+- [x] Подготовить короткий operator workflow для paper trading day.
 
 ### Phase 5: Minimal UI read-model slice
 
@@ -567,9 +567,9 @@
 ## 11. Порядок handoff в следующую сессию
 
 - `Phase 1` и `Phase 2` по сути закрыты; `Phase 3` собран до safe read-only smoke gate; core `Phase 4` выполнена; config-basis `Phase 6` уже есть.
-- Начинать не с переосмысления foundation, а с ближайшего открытого шага: ручной public-only partial `Alor test contour` smoke через `.env`.
-- Если есть `ALOR_TEST_PORTFOLIO`, следующим шагом идет portfolio-scoped read-only smoke для `/md/v2/Clients/...` и `ws_portfolio`.
-- После smoke идти в canonical mapper hardening и первые read-model/operator workflows.
+- Public-only partial `Alor test contour` smoke уже выполнен; ближайший открытый adapter step — portfolio-scoped read-only smoke после заполнения `ALOR_TEST_PORTFOLIO`.
+- После portfolio-scoped smoke идти в canonical mapper hardening на реальных portfolio payloads и первые read-model workflows.
+- Для paper/replay contour использовать `docs/superpowers/runbooks/paper-trading-day.md` и `python -m statarb.runtime.paper_trading_day`.
 - Более широкие `.env`/profile/live-extension шаги считать отдельным follow-up, а не implicit продолжением safe smoke.
 - Не перескакивать сразу к `UI` или `live`.
 - После каждого phase gate делать review against this plan и contracts.
