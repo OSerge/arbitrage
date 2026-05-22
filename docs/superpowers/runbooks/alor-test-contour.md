@@ -285,10 +285,26 @@ uv run python -m statarb.runtime.alor_test_read_only smoke --env-file .env --ski
   - `cws`/command path не выполнялся.
 - Вердикт: public-only read-only smoke прошел; auth refresh shape и public HTTP probe подтверждены на реальном test contour.
 
+### 2026-05-23 — portfolio-scoped read-only smoke
+
+- Команда: `uv run python -m statarb.runtime.alor_test_read_only smoke --env-file .env`
+- Contour: `test`
+- Scope: `portfolio_scoped`
+- Portfolio: `D00014` (explicit `ALOR_TEST_PORTFOLIO`, validated against JWT claim)
+- Результаты:
+  - `POST https://oauthdev.alor.ru/refresh` -> access token выдан, `expires_in_seconds=1800`;
+  - `GET .../Clients/MOEX/D00014/positions` -> HTTP `200`, empty array;
+  - `GET .../Clients/MOEX/D00014/summary` -> HTTP `200`, `portfolioEvaluation=100000`, `buyingPower=100000`;
+  - `GET .../Clients/MOEX/D00014/orders` -> HTTP `200`, empty array;
+  - `GET .../Clients/MOEX/D00014/trades` -> HTTP `200`, empty array;
+  - `ws_portfolio` envelopes построены (redacted), но live WS session не открывался;
+  - `cws`/command path не выполнялся.
+- Вердict: portfolio-scoped read-only smoke прошел; portfolio HTTP surfaces подтверждены на реальном test contour.
+
 ### Следующий ожидаемый шаг
 
-- Заполнить `ALOR_TEST_PORTFOLIO` валидным test portfolio для этого refresh token.
-- Повторить smoke без изменения helper-команды; helper автоматически перейдет в `portfolio_scoped` mode и добавит `/md/v2/Clients/...` surfaces плюс redacted `ws_portfolio` envelopes.
+- Расширить canonical mapping на реальные portfolio payloads (summary уже подтвержден; orders/trades/positions fixtures — из docs до появления непустых данных).
+- Перейти к read-model contract / operator workflow foundation.
 
 ## Что пользователь должен подготовить перед первой реальной проверкой
 
