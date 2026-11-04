@@ -12,6 +12,10 @@
 
 ## 0. Текущий статус реализации
 
+### Completed approved remediation — 2026-11-04
+
+User approved ADR 0005: causal research/funded futures backtesting and migration of `core/` implementations into `statarb/`, with legacy facades. Implemented slices: aligned/range-bounded OHLCV, sourced historical specifications, past-only models/Holm selection, frozen integer budget hedges, shared futures accounting, transactional journals with marks, checkpoint replay, CLI and regression coverage. Verification completed: 175 tests passed; Ruff lint, formatting of changed Python files, legacy CLI/import checks and `git diff --check` passed. The verification checkpoint and consistency-review fixes are recorded in the [causal-backtest runbook](../runbooks/causal-backtest.md#проверка). This completed workstream supersedes the older research assumptions below and does not authorize live commands or add infrastructure.
+
 ### Классификация текущей синхронизации
 
 - Тип изменения: `non-breaking clarification`.

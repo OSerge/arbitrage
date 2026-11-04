@@ -17,13 +17,17 @@ _DATA_DIR = _REPO_ROOT / "data"
 
 def test_bridge_builds_contracts_from_normalized_alor_parquet_pair(tmp_path) -> None:
     loader = getattr(data_module, "load_history_bars_dataset", None)
-    assert loader is not None, "statarb.data.load_history_bars_dataset export is missing"
+    assert loader is not None, (
+        "statarb.data.load_history_bars_dataset export is missing"
+    )
 
     bridge_module = importlib.import_module("statarb.bridges.historical")
-    build_from_alor = getattr(bridge_module, "build_historical_pair_bridge_from_alor_datasets", None)
-    assert (
-        build_from_alor is not None
-    ), "statarb.bridges.historical.build_historical_pair_bridge_from_alor_datasets is missing"
+    build_from_alor = getattr(
+        bridge_module, "build_historical_pair_bridge_from_alor_datasets", None
+    )
+    assert build_from_alor is not None, (
+        "statarb.bridges.historical.build_historical_pair_bridge_from_alor_datasets is missing"
+    )
 
     left_batch = _ingest_legacy_fixture_as_alor_history(
         tmp_path=tmp_path,
@@ -37,7 +41,9 @@ def test_bridge_builds_contracts_from_normalized_alor_parquet_pair(tmp_path) -> 
     )
 
     left_dataset = loader(storage_root=tmp_path, manifest_path=left_batch.manifest_path)
-    right_dataset = loader(storage_root=tmp_path, manifest_path=right_batch.manifest_path)
+    right_dataset = loader(
+        storage_root=tmp_path, manifest_path=right_batch.manifest_path
+    )
 
     bundle = build_from_alor(
         left_dataset=left_dataset,
@@ -51,15 +57,15 @@ def test_bridge_builds_contracts_from_normalized_alor_parquet_pair(tmp_path) -> 
         f"file://{right_batch.normalized_artifact.storage_uri}",
     )
     assert bundle.source_pair == ("SRM5", "SPM5")
-    assert bundle.source_signal == 1
+    assert bundle.source_signal == 0
     assert bundle.source_row_count >= 600
     assert bundle.signal_intents[0].instrument.symbol == "SRM5"
     assert bundle.signal_intents[1].instrument.symbol == "SPM5"
-    assert bundle.target_positions[0].target_quantity > 0
-    assert bundle.target_positions[1].target_quantity < 0
+    assert bundle.target_positions[0].target_quantity == 0
+    assert bundle.target_positions[1].target_quantity == 0
     assert bundle.fill_prices_by_symbol == {
-        "SRM5": Decimal("31379.0"),
-        "SPM5": Decimal("31265.0"),
+        "SRM5": Decimal("31376.0"),
+        "SPM5": Decimal("31130.0"),
     }
 
 
@@ -73,7 +79,7 @@ def _ingest_legacy_fixture_as_alor_history(
     request = HistoricalBarsRequest(
         symbol=symbol,
         exchange="MOEX",
-        tf="60",
+        tf="3600",
         from_time=int(frame.iloc[0]["time"]),
         to_time=int(frame.iloc[-1]["time"]),
         split_adjust=True,

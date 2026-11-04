@@ -6,6 +6,8 @@ This file defines what agents may change autonomously, what requires founder app
 
 ## Operating Rule
 
+- Approved workstream, 2026-11-04: implement the causal futures audit plan under `ADR 0005`, including the staged `core/` migration, integer budget sizing, entry-frozen hedges, cost accounting, transactional paper groups and strict replay. This authorization does not enable broker commands or change live scope.
+
 - `Founder` means the user.
 - If a change fits more than one category, follow the strictest category.
 - If approval is required, stop before implementation or before running the risky validation step.

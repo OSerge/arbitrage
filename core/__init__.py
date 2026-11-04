@@ -1,44 +1,74 @@
-"""
-Модуль с основными классами для проведения арбитража.
-"""
+"""Lazy compatibility exports; imports do not configure logging or start research."""
 
-from .alor import AlorAPI
-from .data import DataCache, DataStorage, DataManager
-from .analysis import DataAnalyzer
-from .backtest import Backtester
-from .backtest_improved import ImprovedBacktester, SignalGenerator, ReturnsCalculator, PerformanceAnalyzer, RiskAnalyzer
-from .downloader import SecurityDownloader
-from .pipeline import ArbitragePipeline
-from .formatters import RichResultsFormatter, HorizontalResultsFormatter
+from importlib import import_module
 
-from .interfaces import (
-    IDataProvider, IDataStorage, IDataCache, 
-    IAnalyzer, IBacktester, IResultsFormatter
-)
+_EXPORTS = {
+    **dict.fromkeys(("AlorAPI",), "alor"),
+    **dict.fromkeys(("DataCache", "DataStorage", "DataManager"), "data"),
+    "DataAnalyzer": "analysis",
+    "Backtester": "backtest",
+    **dict.fromkeys(
+        (
+            "ImprovedBacktester",
+            "SignalGenerator",
+            "ReturnsCalculator",
+            "PerformanceAnalyzer",
+            "RiskAnalyzer",
+        ),
+        "backtest_improved",
+    ),
+    "SecurityDownloader": "downloader",
+    "ArbitragePipeline": "pipeline",
+    **dict.fromkeys(
+        ("RichResultsFormatter", "HorizontalResultsFormatter"), "formatters"
+    ),
+    **dict.fromkeys(
+        (
+            "IDataProvider",
+            "IDataStorage",
+            "IDataCache",
+            "IAnalyzer",
+            "IBacktester",
+            "IResultsFormatter",
+        ),
+        "interfaces",
+    ),
+    **dict.fromkeys(
+        (
+            "TradingConfig",
+            "BacktestConfig",
+            "DataConfig",
+            "APIConfig",
+            "AnalysisConfig",
+            "TRADING_CONFIG",
+            "BACKTEST_CONFIG",
+            "DATA_CONFIG",
+            "API_CONFIG",
+            "ANALYSIS_CONFIG",
+            "DEFAULT_FUTURES",
+        ),
+        "config",
+    ),
+    **dict.fromkeys(
+        (
+            "generate_symbol_pairs",
+            "check_data_files_exist",
+            "validate_series_data",
+            "setup_logging",
+        ),
+        "utils",
+    ),
+}
+__all__ = list(_EXPORTS)
 
-from .config import (
-    TradingConfig, BacktestConfig, DataConfig, APIConfig, AnalysisConfig,
-    TRADING_CONFIG, BACKTEST_CONFIG, DATA_CONFIG, API_CONFIG, ANALYSIS_CONFIG,
-    DEFAULT_FUTURES
-)
 
-from .utils import generate_symbol_pairs, check_data_files_exist, validate_series_data, setup_logging
+def __getattr__(name):
+    if name not in _EXPORTS:
+        raise AttributeError(name)
+    value = getattr(import_module(f"{__name__}.{_EXPORTS[name]}"), name)
+    globals()[name] = value
+    return value
 
-__all__ = [
-    # Основные классы
-    'AlorAPI', 'DataCache', 'DataStorage', 'DataManager', 'DataAnalyzer',
-    'Backtester', 'ImprovedBacktester', 'SignalGenerator', 'ReturnsCalculator',
-    'PerformanceAnalyzer', 'RiskAnalyzer', 'SecurityDownloader', 'ArbitragePipeline',
-    'RichResultsFormatter', 'HorizontalResultsFormatter',
-    
-    # Интерфейсы
-    'IDataProvider', 'IDataStorage', 'IDataCache', 'IAnalyzer', 'IBacktester', 'IResultsFormatter',
-    
-    # Конфигурация
-    'TradingConfig', 'BacktestConfig', 'DataConfig', 'APIConfig', 'AnalysisConfig',
-    'TRADING_CONFIG', 'BACKTEST_CONFIG', 'DATA_CONFIG', 'API_CONFIG', 'ANALYSIS_CONFIG',
-    'DEFAULT_FUTURES',
-    
-    # Утилиты
-    'generate_symbol_pairs', 'check_data_files_exist', 'validate_series_data', 'setup_logging'
-]
+
+def __dir__():
+    return sorted(set(globals()) | set(_EXPORTS))

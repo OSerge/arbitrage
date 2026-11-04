@@ -13,6 +13,8 @@
 
 ## Индекс
 
+- [causal-futures-research.md](causal-futures-research.md) — причинный research, целые фьючерсные контракты, денежный ledger, транзакционный journal v2 и строгий replay (ADR 0005).
+
 - `agent-operating-system.md` - общие contract conventions, authority hierarchy, envelope semantics.
 - `alor-market-data.md` - public/open `AlorAPI` market-data surfaces, payload shapes и MVP storage conventions.
 - `alor-portfolio-mapping.md` - portfolio-scoped `Alor` HTTP/WS payloads -> canonical execution events.

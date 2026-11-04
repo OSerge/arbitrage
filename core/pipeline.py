@@ -1,252 +1,188 @@
-import logging
-from datetime import datetime, timedelta
-from typing import List, Dict, Tuple
+"""Legacy orchestration facade; pair research and accounting live in statarb."""
+
+from datetime import UTC, datetime, timedelta
+from itertools import combinations
 import pandas as pd
 
-from core.downloader import SecurityDownloader
 from core.analysis import DataAnalyzer
-from core.data import DataManager, DataStorage
-from core.backtest import Backtester, print_backtest_results, print_summary_results
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-logger = logging.getLogger(__name__)
+from core.backtest import MIGRATION, legacy_result
+from core.data import DataManager
+from core.downloader import SecurityDownloader
+from statarb.data.bars import prepare_pair_bars
+from statarb.domain import InstrumentRef, InstrumentType
+from statarb.research.backtest import BacktestRequest, run_universe
+from statarb.research.config import StrategyConfig
+from statarb.research.models import select_models
 
 
 class ArbitragePipeline:
-    """Класс для выполнения полного пайплайна арбитража"""
-    
     def __init__(
         self,
-        symbols: List[str],
-        lookback: int = 60,
-        entry_threshold: float = 2.0,
-        exit_threshold: float = 0.5,
-        broker_commission: float = 1.0,
-        exchange_commission: float = 1.0,
-        max_workers: int = 5,
-        min_avg_volume: float = 200
-    ):
-        """
-        Инициализация пайплайна
-        
-        Args:
-            symbols (List[str]): Список тикеров для анализа
-            lookback (int): Окно наблюдения для расчета параметров
-            entry_threshold (float): Порог входа в сделку
-            exit_threshold (float): Порог выхода из сделки
-            broker_commission (float): Комиссия брокера за контракт в рублях
-            exchange_commission (float): Комиссия биржи за контракт в рублях
-            max_workers (int): Количество параллельных потоков для загрузки
-            min_avg_volume (float): Минимальный средний объём торгов (контрактов) в час
-        """
-        self.symbols = symbols
-        self.lookback = lookback
-        self.entry_threshold = entry_threshold
-        self.exit_threshold = exit_threshold
-        self.broker_commission = broker_commission
-        self.exchange_commission = exchange_commission
-        self.min_avg_volume = min_avg_volume
-        
-        # Инициализация компонентов
-        self.downloader = SecurityDownloader(max_workers=max_workers)
-        self.analyzer = DataAnalyzer()
-        self.data_manager = DataManager()
-        self.data_storage = DataStorage()
-    
-    def download_data(self, days: int = 90) -> None:
-        """
-        Загрузка исторических данных
-        
-        Args:
-            days (int): Количество дней для загрузки
-        """
-        logger.info("Загрузка данных...")
-        
-        end_time = datetime.now()
-        start_time = end_time - timedelta(days=days)
-        
-        self.downloader.download_multiple_securities(
-            symbols=self.symbols,
-            start_time=start_time,
-            end_time=end_time,
-            use_parallel=True
-        )
-        
-        logger.info("Загрузка данных завершена.")
-    
-    def find_cointegrated_pairs(self, min_pairs: int = 1) -> List[Tuple[str, str]]:
-        """
-        Поиск коинтегрированных пар
-        
-        Args:
-            min_pairs (int): Минимальное количество пар для поиска
-            
-        Returns:
-            List[Tuple[str, str]]: Список коинтегрированных пар
-        """
-        logger.info("Поиск коинтегрированных пар")
-        
-        # Загружаем данные для всех символов
-        data_dict = {}
-        for symbol in self.symbols:
-            df = self.data_storage.load_data_from_csv(symbol)
-            data_dict[symbol] = df['close']
-        
-        # Создаем DataFrame со всеми ценами
-        prices_df = pd.DataFrame(data_dict)
-        
-        if prices_df.isnull().any().any():
-            logger.warning("Обнаружены пропуски в данных. Выполняется выравнивание...")
-            prices_df = prices_df.dropna()
-            if len(prices_df) < self.lookback:
-                logger.error(f"Недостаточно данных после выравнивания: {len(prices_df)} строк")
-                return []
-            logger.info(f"После выравнивания осталось {len(prices_df)} строк")
-        
-        # Ищем коинтегрированные пары
-        cointegrated_pairs = self.analyzer.find_cointegrated_pairs(prices_df)
-        
-        if len(cointegrated_pairs) < min_pairs:
-            logger.warning(f"Найдено меньше {min_pairs} коинтегрированных пар")
-            return []
-        
-        # Преобразуем результаты в список пар
-        pairs = [(pair['pair'][0], pair['pair'][1]) for pair in cointegrated_pairs]
-        
-        logger.info(f"Найдено {len(pairs)} коинтегрированных пар")
-        return pairs
-    
-    def _is_liquid(self, df: pd.DataFrame) -> bool:
-        """Проверяет средний объём торгов"""
-        if 'volume' not in df.columns:
-            logger.warning("В данных отсутствует колонка volume, пропускаем проверку ликвидности")
-            return True
-        avg_vol = df['volume'].mean()
-        return avg_vol >= self.min_avg_volume
-    
-    def run_backtest(self, pairs: List[Tuple[str, str]]) -> Dict:
-        """
-        Запуск бэктеста для найденных пар
-        
-        Args:
-            pairs (List[Tuple[str, str]]): Список пар для бэктеста
-            
-        Returns:
-            Dict: Результаты бэктеста
-        """
-        logger.info("Начало бэктеста")
-        
-        results = {}
-        
-        for pair in pairs:
-            symbol1, symbol2 = pair
-            logger.info(f"Бэктест для пары {symbol1}-{symbol2}")
-            
-            df1 = self.data_storage.load_data_from_csv(symbol1)
-            df2 = self.data_storage.load_data_from_csv(symbol2)
-            
-            # Проверка ликвидности
-            # if not self._is_liquid(df1) or not self._is_liquid(df2):
-            #     logger.info(f"Недостаточная ликвидность для пары {symbol1}-{symbol2}, пропуск")
-            #     continue
-            
-            merged_df = self.analyzer.join_pair(df1, df2)
-            if merged_df.empty:
-                logger.warning(f"Пустой датафрейм для пары {symbol1}-{symbol2}")
-                continue
-                
-            if merged_df.isnull().any().any():
-                logger.warning(f"Обнаружены пропуски в данных для пары {symbol1}-{symbol2}")
-                merged_df = merged_df.dropna()
-                if len(merged_df) < self.lookback:
-                    logger.error(f"Недостаточно данных после очистки: {len(merged_df)} строк")
-                    continue
-            
-            backtester = Backtester(
-                series_1=merged_df['close_1'],
-                series_2=merged_df['close_2'],
-                lookback=self.lookback,
-                entry_threshold=self.entry_threshold,
-                exit_threshold=self.exit_threshold,
-                broker_commission=self.broker_commission,
-                exchange_commission=self.exchange_commission
-            )
-            
-            try:
-                pair_results = backtester.run_full_backtest(self.analyzer)
-                results[f"{symbol1}-{symbol2}"] = pair_results
-            except Exception as e:
-                logger.error(f"Ошибка при бэктесте пары {symbol1}-{symbol2}: {e}")
-                continue
-        
-        logger.info("Бэктест завершен")
-        return results
-    
-    def run_pipeline(self, days: int = 120, min_pairs: int = 1) -> Dict:
-        """
-        Запуск полного пайплайна
-        
-        Args:
-            days (int): Количество дней для загрузки
-            min_pairs (int): Минимальное количество пар для поиска
-            
-        Returns:
-            Dict: Результаты пайплайна
-        """
-        self.download_data(days)
-        
-        pairs = self.find_cointegrated_pairs(min_pairs)
-        if not pairs:
-            logger.error("Не найдено коинтегрированных пар")
-            return {}
-        
-        results = self.run_backtest(pairs)
-        
-        return {
-            'pairs': pairs,
-            'results': results
-        }
-
-
-def main():
-    futures = [
-        "GKM5", # Обыкновенные акции ПАО «ГМК «Норильский никель»
-        "GZM5", # Газпром обыкновенные
-        "CHM5", # обыкновенные акции ПАО «Северсталь»
-        "TTM5", # Татнефть
-        "TNM5", # Транснефть
-        "RNM5", # Роснефть
-        "LKM5", # Лукойл
-        "SRM5", # обыкновенные акции ПАО Сбербанк
-        "SPM5", # привилег. акции ПАО Сбербанк
-        "VBM5", # ВТБ
-    ]
-    
-    pipeline = ArbitragePipeline(
-        symbols=futures,
+        symbols,
         lookback=60,
         entry_threshold=2.0,
         exit_threshold=0.5,
-        broker_commission=1.0,
-        exchange_commission=1.0,
+        broker_commission=None,
+        exchange_commission=None,
         max_workers=5,
-        min_avg_volume=50
-    )
-    
-    results = pipeline.run_pipeline(days=120, min_pairs=1)
-    
-    if results:
-        print("\nНайденные коинтегрированные пары:")
-        for pair in results['pairs']:
-            print(f"- {pair[0]}-{pair[1]}")
-        
-        print("\nРезультаты бэктеста:")
-        print_summary_results(results['results'])
+        min_avg_volume=200,
+        *,
+        instrument_catalog=None,
+        initial_cash=None,
+        pair_budget=None,
+        max_hedge_error=None,
+        costs=None,
+        risk_policy=None,
+        data_directory=None,
+        timeframe_seconds=3600,
+        min_estimation_window=512,
+        recompute_frequency=16,
+    ):
+        if broker_commission is not None or exchange_commission is not None:
+            raise ValueError(
+                "Legacy commission arguments have ambiguous units; supply explicit ExecutionCosts."
+            )
+        self.symbols = tuple(symbols)
+        self.config = StrategyConfig(
+            lookback=lookback,
+            entry_threshold=entry_threshold,
+            exit_threshold=exit_threshold,
+            min_avg_volume=min_avg_volume,
+            min_estimation_window=min_estimation_window,
+            recompute_frequency=recompute_frequency,
+        )
+        self.min_avg_volume = min_avg_volume
+        self.timeframe_seconds = timeframe_seconds
+        self.catalog, self.initial_cash, self.pair_budget = (
+            instrument_catalog,
+            initial_cash,
+            pair_budget,
+        )
+        self.max_hedge_error, self.costs, self.risk_policy = (
+            max_hedge_error,
+            costs,
+            risk_policy,
+        )
+        self.downloader = SecurityDownloader(max_workers=max_workers)
+        self.analyzer = DataAnalyzer(alpha=self.config.alpha)
+        self.data_manager = DataManager(data_directory=data_directory)
+        self.data_storage = self.data_manager.storage
+        self.downloader.data_storage = self.data_storage
+        self.selection_as_of = None
+
+    def _require_financial_inputs(self):
+        if any(
+            value is None
+            for value in (
+                self.catalog,
+                self.initial_cash,
+                self.pair_budget,
+                self.max_hedge_error,
+                self.costs,
+                self.risk_policy,
+            )
+        ):
+            raise ValueError(MIGRATION)
+
+    def download_data(self, days=90):
+        end = datetime.now(UTC)
+        result = self.downloader.download_multiple_securities(
+            symbols=list(self.symbols),
+            start_time=end - timedelta(days=days),
+            end_time=end,
+            timeframe=self.timeframe_seconds,
+            use_parallel=True,
+        )
+        missing = set(self.symbols) - set(result)
+        if missing:
+            raise ValueError(
+                f"Download failed for {sorted(missing)}; refusing to reuse stale local files."
+            )
+        self.data_manager.cache.clear()
+        return result
+
+    def find_cointegrated_pairs(self, min_pairs=1):
+        """Diagnostic selection on initial formation only; not an execution filter."""
+        frames = {
+            symbol: self.data_storage.load_data(symbol) for symbol in self.symbols
+        }
+        aligned = {
+            pair: prepare_pair_bars(
+                frames[pair[0]],
+                frames[pair[1]],
+                timeframe_seconds=self.timeframe_seconds,
+            )
+            for pair in combinations(self.symbols, 2)
+        }
+        if not aligned or any(
+            len(frame) < self.config.min_estimation_window for frame in aligned.values()
+        ):
+            raise ValueError("Insufficient common formation bars for pair selection.")
+        cutoff = max(
+            frame.end_at(self.config.min_estimation_window - 1)
+            for frame in aligned.values()
+        )
+        histories = {}
+        for pair, frame in aligned.items():
+            mask = frame.index + pd.Timedelta(seconds=self.timeframe_seconds) <= cutoff
+            histories[pair] = (
+                frame.left.close.loc[mask].to_numpy(),
+                frame.right.close.loc[mask].to_numpy(),
+            )
+        models = select_models(
+            histories, fitted_until=cutoff, significance=self.config.alpha
+        )
+        self.selection_as_of = cutoff
+        pairs = [pair for pair, model in models.items() if model.eligible]
+        return pairs if len(pairs) >= min_pairs else []
+
+    def _is_liquid(self, frame):
+        return "volume" in frame and frame.volume.mean() >= self.min_avg_volume
+
+    def run_backtest(self, pairs):
+        self._require_financial_inputs()
+        requests = {}
+        for left, right in pairs:
+            requests[(left, right)] = BacktestRequest(
+                InstrumentRef(left, "MOEX", InstrumentType.FUTURE),
+                InstrumentRef(right, "MOEX", InstrumentType.FUTURE),
+                self.data_manager.load_data_with_cache(left),
+                self.data_manager.load_data_with_cache(right),
+                self.catalog,
+                self.initial_cash,
+                self.pair_budget,
+                self.max_hedge_error,
+                self.costs,
+                self.risk_policy,
+                timeframe_seconds=self.timeframe_seconds,
+                strategy=self.config,
+                session_id=f"backtest-{left}-{right}",
+                trading_start=self.selection_as_of,
+            )
+        results = run_universe(requests)
+        return {
+            f"{pair[0]}-{pair[1]}": legacy_result(result, requests[pair])
+            for pair, result in results.items()
+        }
+
+    def run_pipeline(self, days=120, min_pairs=1, *, download=True):
+        self._require_financial_inputs()
+        if download:
+            self.download_data(days)
+        pairs = list(combinations(self.symbols, 2))
+        self.selection_as_of = None
+        if len(pairs) < min_pairs:
+            raise ValueError("The configured universe has fewer pairs than min_pairs.")
+        # Preserve every outcome, including unprofitable/no-trade pairs. Selection
+        # occurs at each historical fit, never once on the complete future sample.
+        return {
+            "pairs": pairs,
+            "results": self.run_backtest(pairs),
+            "accounting": "independent pair accounts; results are not a pooled portfolio",
+        }
 
 
-if __name__ == '__main__':
-    main() 
+if __name__ == "__main__":
+    from statarb.research.cli import main
+
+    raise SystemExit(main())

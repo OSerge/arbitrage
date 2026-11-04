@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from dataclasses import replace
 from decimal import Decimal
+
+import pytest
 
 from statarb.adapters.alor.mapper import (
     AlorMappingContext,
@@ -10,7 +12,7 @@ from statarb.adapters.alor.mapper import (
     PlaceholderAlorMapper,
 )
 from statarb.domain.events import ExecutionContour
-from statarb.domain.instruments import InstrumentType
+from statarb.domain.instruments import InstrumentRef, InstrumentType
 from statarb.domain.orders import OrderSide, OrderStatus, OrderType
 from tests.adapters.alor.fixtures.portfolio_payloads import (
     MAPPING_CAPTURED_AT,
@@ -62,7 +64,9 @@ def test_placeholder_mapper_classifies_known_alor_streams() -> None:
     assert account_result.events[0].kind.value == "account-summary"
 
 
-def test_placeholder_mapper_preserves_unknown_payloads_for_future_contract_wiring() -> None:
+def test_placeholder_mapper_preserves_unknown_payloads_for_future_contract_wiring() -> (
+    None
+):
     mapper = PlaceholderAlorMapper()
 
     result = mapper.map_payload(
@@ -73,7 +77,10 @@ def test_placeholder_mapper_preserves_unknown_payloads_for_future_contract_wirin
 
     assert result.status is MappingStatus.DEFERRED
     assert result.events == ()
-    assert result.unmapped_reason == "No canonical event contract is frozen for this payload yet."
+    assert (
+        result.unmapped_reason
+        == "No canonical event contract is frozen for this payload yet."
+    )
     assert result.payload["symbol"] == "SBER"
 
 
@@ -148,7 +155,14 @@ def test_canonical_mapper_skips_currency_positions() -> None:
     mapper = CanonicalAlorMapper()
     result = mapper.map_http_surface(
         surface="positions",
-        payload=[{"symbol": "RUB", "exchange": "MOEX", "qtyUnits": 100000, "isCurrency": True}],
+        payload=[
+            {
+                "symbol": "RUB",
+                "exchange": "MOEX",
+                "qtyUnits": 100000,
+                "isCurrency": True,
+            }
+        ],
         context=_context(),
     )
 
@@ -192,3 +206,30 @@ def test_canonical_mapper_marks_partially_filled_working_orders() -> None:
     )
 
     assert result.events[0].status is OrderStatus.PARTIALLY_FILLED
+
+
+@pytest.mark.parametrize("transport", ["http", "ws"])
+def test_canonical_mapper_preserves_reference_identity_and_lot_conversion(transport):
+    instrument = InstrumentRef("SRM5", "MOEX", InstrumentType.FUTURE)
+    context = replace(
+        _context(portfolio=" D39004 "),
+        instruments={"broker-alias": instrument},
+        lot_sizes={"broker-alias": Decimal("10")},
+    )
+    payload = dict(TRADE_GAZP, symbol="broker-alias", qty=3)
+    payload.pop("qtyUnits")
+    mapper = CanonicalAlorMapper()
+    if transport == "http":
+        result = mapper.map_http_surface(
+            surface="trades", payload=[payload], context=context
+        )
+    else:
+        result = mapper.map_payload(
+            stream="portfolio",
+            opcode="TradesGetAndSubscribe",
+            payload={"data": payload},
+            context=context,
+        )
+    fill = result.events[0]
+    assert fill.instrument == instrument
+    assert fill.fill_quantity == 30

@@ -5,6 +5,8 @@
 
 ## Назначение
 
+Обновление 2026-11-04: это smoke конечного состояния с явно синтетическими спецификациями; финансовый прогон описан в [causal-backtest.md](causal-backtest.md). Helper больше не ищет последний активный сигнал. На текущем SRM5/SPM5 конечное состояние flat, журнал содержит пять событий: две цены, два снимка и итог счёта. Для заполненных заявок теперь записывается терминальный статус FILLED. Каждый запуск использует новый журнал либо явное восстановление ledger.
+
 Этот runbook описывает безопасный operator workflow для локального paper/replay trading day без брокерских соединений и без live enablement. Он покрывает default historical smoke path и служит базой для post-factum разбора торгового дня через canonical event journal.
 
 ## Scope и границы
@@ -71,7 +73,10 @@ uv run python -m statarb.data.alor_fetch pair-bootstrap \
   --left-symbol SRM5 \
   --right-symbol SPM5 \
   --exchange MOEX \
-  --timeframe 60
+  --timeframe 3600 \
+  --specifications historical-specifications.json \
+  --pair-budget 100000 \
+  --max-hedge-error 0.05
 ```
 
 Перед этим при отсутствии local reference snapshots может понадобиться:

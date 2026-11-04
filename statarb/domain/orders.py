@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Canonical order and fill contracts."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -32,7 +32,9 @@ class OrderSide(StrEnum):
                 return member
 
         allowed = ", ".join(member.value for member in cls)
-        raise ValueError(f"Unsupported order side: {value!r}. Expected one of: {allowed}.")
+        raise ValueError(
+            f"Unsupported order side: {value!r}. Expected one of: {allowed}."
+        )
 
 
 class OrderType(StrEnum):
@@ -50,7 +52,9 @@ class OrderType(StrEnum):
                 return member
 
         allowed = ", ".join(member.value for member in cls)
-        raise ValueError(f"Unsupported order type: {value!r}. Expected one of: {allowed}.")
+        raise ValueError(
+            f"Unsupported order type: {value!r}. Expected one of: {allowed}."
+        )
 
 
 class OrderStatus(StrEnum):
@@ -73,7 +77,9 @@ class OrderStatus(StrEnum):
                 return member
 
         allowed = ", ".join(member.value for member in cls)
-        raise ValueError(f"Unsupported order status: {value!r}. Expected one of: {allowed}.")
+        raise ValueError(
+            f"Unsupported order status: {value!r}. Expected one of: {allowed}."
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,8 +100,12 @@ class OrderEvent(SerializableContract):
     signal_intent_id: str | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "event_id", _require_non_empty(self.event_id, "event_id"))
-        object.__setattr__(self, "order_id", _require_non_empty(self.order_id, "order_id"))
+        object.__setattr__(
+            self, "event_id", _require_non_empty(self.event_id, "event_id")
+        )
+        object.__setattr__(
+            self, "order_id", _require_non_empty(self.order_id, "order_id")
+        )
         if not isinstance(self.instrument, InstrumentRef):
             raise ValueError("instrument must be an InstrumentRef instance.")
 
@@ -122,7 +132,12 @@ class OrderEvent(SerializableContract):
         if self.order_type is OrderType.LIMIT and self.limit_price is None:
             raise ValueError("limit_price is required for limit orders.")
 
-        for field_name in ("broker_order_id", "reason", "target_position_id", "signal_intent_id"):
+        for field_name in (
+            "broker_order_id",
+            "reason",
+            "target_position_id",
+            "signal_intent_id",
+        ):
             value = getattr(self, field_name)
             if value is not None:
                 normalized = value.strip()
@@ -144,9 +159,13 @@ class FillEvent(SerializableContract):
     broker_trade_id: str | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "event_id", _require_non_empty(self.event_id, "event_id"))
+        object.__setattr__(
+            self, "event_id", _require_non_empty(self.event_id, "event_id")
+        )
         object.__setattr__(self, "fill_id", _require_non_empty(self.fill_id, "fill_id"))
-        object.__setattr__(self, "order_id", _require_non_empty(self.order_id, "order_id"))
+        object.__setattr__(
+            self, "order_id", _require_non_empty(self.order_id, "order_id")
+        )
         if not isinstance(self.instrument, InstrumentRef):
             raise ValueError("instrument must be an InstrumentRef instance.")
 

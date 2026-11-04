@@ -30,5 +30,7 @@
 
 ## Notes
 
-- `InstrumentRef` is the only mandatory executable data object for the current workstream.
+- ADR 0005 adds `InstrumentSpec` and `InstrumentCatalog` as effective-dated instrument economics. See [causal futures contract](causal-futures-research.md); instrument identity remains `InstrumentRef`.
+
+- `InstrumentRef` is the mandatory identity object; funded financial research additionally requires the historical `InstrumentSpec`/`InstrumentCatalog` described above. Read-only identity mapping does not require financial assumptions.
 - richer symbol-master fields may be added later without changing current research/execution contracts.

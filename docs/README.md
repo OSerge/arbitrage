@@ -4,6 +4,8 @@
 
 ## Актуальный рабочий контур
 
+Обновление 2026-11-04: реализовано и проверено утверждённое исправление причинности и расчётов фьючерсов. [ADR 0005](adr/0005-causal-futures-research-and-shared-paper-ledger.md), [финансовый контракт](superpowers/contracts/causal-futures-research.md) и [инструкция запуска](superpowers/runbooks/causal-backtest.md) уточняют границу: `statarb.research` — общее ядро, `core/` — совместимые входы. Старые описания walk-forward и реалистичных издержек не служат подтверждением правильности прежних результатов.
+
 Сейчас активным контуром проекта считается:
 
 - узкий `agent-operated` MVP;

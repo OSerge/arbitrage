@@ -1,18 +1,20 @@
-from __future__ import annotations
+"""Read legacy events and committed v2 transaction records."""
 
-"""Load runtime event journals from JSONL."""
-
-import json
 from dataclasses import dataclass
 from datetime import datetime
+import json
 from pathlib import Path
 from typing import Any
+import warnings
 
 from statarb.domain.instruments import InstrumentRef
 from statarb.domain.orders import FillEvent, OrderEvent
-from statarb.domain.positions import AccountSummary, PositionSnapshot
+from statarb.domain.positions import AccountSummary, PositionSnapshot, PriceMark
+from statarb.runtime.paper.event_sink import RuntimeDomainEvent, transaction_checksum
 
-RuntimeDomainEvent = OrderEvent | FillEvent | PositionSnapshot | AccountSummary
+
+class UncommittedJournalTailWarning(UserWarning):
+    pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,61 +22,110 @@ class EventJournalRecord:
     event_type: str
     payload: dict[str, Any]
     lineage: dict[str, str]
+    transaction_id: str | None = None
 
 
 def load_event_journal(path: str | Path) -> tuple[EventJournalRecord, ...]:
-    journal_path = Path(path)
-    if not journal_path.exists():
+    path = Path(path)
+    if not path.exists():
         return ()
-
-    records: list[EventJournalRecord] = []
-    with journal_path.open("r", encoding="utf-8") as handle:
-        for raw_line in handle:
-            line = raw_line.strip()
-            if not line:
-                continue
-            item = json.loads(line)
-            records.append(
-                EventJournalRecord(
-                    event_type=item["event_type"],
-                    payload=dict(item["payload"]),
-                    lineage=dict(item.get("lineage", {})),
-                )
+    lines = path.read_bytes().splitlines(keepends=True)
+    records = []
+    transactions = {}
+    for number, raw_line in enumerate(lines, start=1):
+        if not raw_line.strip():
+            continue
+        if not raw_line.endswith(b"\n"):
+            warnings.warn(
+                f"Ignoring uncommitted final journal tail at line {number}.",
+                UncommittedJournalTailWarning,
+                stacklevel=2,
             )
+            break
+        try:
+            item = json.loads(raw_line)
+            transaction_id = None
+            if "schema_version" in item:
+                if item["schema_version"] != 2:
+                    raise ValueError("Unsupported journal schema_version.")
+                transaction_id = item["transaction_id"]
+                entries = item["events"]
+                if not transaction_id or not isinstance(entries, list) or not entries:
+                    raise ValueError("Invalid transaction shape.")
+                checksum = transaction_checksum(transaction_id, entries)
+                if checksum != item["checksum"]:
+                    raise ValueError("Journal transaction checksum mismatch.")
+                if transaction_id in transactions:
+                    if transactions[transaction_id] != checksum:
+                        raise ValueError("Conflicting duplicate transaction id.")
+                    continue
+                transactions[transaction_id] = checksum
+            else:
+                entries = [item]
+            for entry in entries:
+                if "event_id" in entry:
+                    payload = entry["payload"]
+                    expected_id = payload.get(
+                        "event_id",
+                        payload.get("snapshot_id", payload.get("summary_id")),
+                    )
+                    expected_time = payload.get(
+                        "occurred_at", payload.get("captured_at")
+                    )
+                    if (
+                        entry["event_id"] != expected_id
+                        or entry.get("occurred_at") != expected_time
+                        or entry.get("contour") != payload["contour"]
+                    ):
+                        raise ValueError("Event envelope disagrees with its payload.")
+                    if entry.get("source") not in {
+                        "execution",
+                        "adapter",
+                        "replay",
+                        "research",
+                        "portfolio",
+                        "ops",
+                    }:
+                        raise ValueError("Invalid event source.")
+                record = EventJournalRecord(
+                    entry["event_type"],
+                    dict(entry["payload"]),
+                    dict(entry.get("lineage", {})),
+                    transaction_id,
+                )
+                decode_event_record(record)
+                records.append(record)
+        except (ValueError, TypeError, KeyError, UnicodeDecodeError) as exc:
+            raise ValueError(
+                f"Invalid committed journal record at line {number}: {exc}"
+            ) from exc
     return tuple(records)
 
 
 def decode_event_record(record: EventJournalRecord) -> RuntimeDomainEvent:
     payload = dict(record.payload)
-
-    if record.event_type == "order_event":
-        payload["instrument"] = _instrument_from_payload(payload["instrument"])
-        payload["occurred_at"] = _datetime_from_payload(payload["occurred_at"])
-        return OrderEvent(**payload)
-    if record.event_type == "fill_event":
-        payload["instrument"] = _instrument_from_payload(payload["instrument"])
-        payload["occurred_at"] = _datetime_from_payload(payload["occurred_at"])
-        return FillEvent(**payload)
-    if record.event_type == "position_snapshot":
-        payload["instrument"] = _instrument_from_payload(payload["instrument"])
-        payload["captured_at"] = _datetime_from_payload(payload["captured_at"])
-        return PositionSnapshot(**payload)
-    if record.event_type == "account_summary":
-        payload["captured_at"] = _datetime_from_payload(payload["captured_at"])
-        return AccountSummary(**payload)
-    raise ValueError(f"Unsupported journal event type: {record.event_type!r}.")
-
-
-def _instrument_from_payload(payload: dict[str, Any]) -> InstrumentRef:
-    return InstrumentRef(
-        symbol=payload["symbol"],
-        exchange=payload["exchange"],
-        instrument_type=payload["instrument_type"],
+    classes = {
+        "order_event": OrderEvent,
+        "fill_event": FillEvent,
+        "position_snapshot": PositionSnapshot,
+        "account_summary": AccountSummary,
+        "price_mark": PriceMark,
+    }
+    cls = classes.get(record.event_type)
+    if cls is None:
+        raise ValueError(f"Unsupported journal event type: {record.event_type!r}")
+    if "instrument" in payload:
+        payload["instrument"] = InstrumentRef(**payload["instrument"])
+    field = (
+        "captured_at" if cls in (PositionSnapshot, AccountSummary) else "occurred_at"
     )
+    payload[field] = datetime.fromisoformat(payload[field])
+    return cls(**payload)
 
 
-def _datetime_from_payload(value: str) -> datetime:
-    return datetime.fromisoformat(value)
-
-
-__all__ = ["EventJournalRecord", "RuntimeDomainEvent", "decode_event_record", "load_event_journal"]
+__all__ = [
+    "EventJournalRecord",
+    "RuntimeDomainEvent",
+    "decode_event_record",
+    "load_event_journal",
+]

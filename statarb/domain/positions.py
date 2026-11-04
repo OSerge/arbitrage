@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Canonical target, position, and account contracts."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -14,6 +14,34 @@ from statarb.domain.events import (
     _require_non_empty,
 )
 from statarb.domain.instruments import InstrumentRef
+
+
+@dataclass(frozen=True, slots=True)
+class PriceMark(SerializableContract):
+    """Observed price input, persisted independently of derived snapshots."""
+
+    event_id: str
+    instrument: InstrumentRef
+    price: Decimal
+    occurred_at: datetime
+    contour: ExecutionContour
+
+    def __post_init__(self):
+        object.__setattr__(
+            self, "event_id", _require_non_empty(self.event_id, "event_id")
+        )
+        if not isinstance(self.instrument, InstrumentRef):
+            raise ValueError("instrument must be an InstrumentRef instance.")
+        price = _coerce_decimal(self.price, "price")
+        if price <= 0:
+            raise ValueError("Mark price must be positive.")
+        object.__setattr__(self, "price", price)
+        object.__setattr__(
+            self,
+            "occurred_at",
+            _require_aware_datetime(self.occurred_at, "occurred_at"),
+        )
+        object.__setattr__(self, "contour", ExecutionContour.coerce(self.contour))
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,11 +90,15 @@ class PositionSnapshot(SerializableContract):
     unrealized_pnl: Decimal = Decimal("0")
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "snapshot_id", _require_non_empty(self.snapshot_id, "snapshot_id"))
+        object.__setattr__(
+            self, "snapshot_id", _require_non_empty(self.snapshot_id, "snapshot_id")
+        )
         if not isinstance(self.instrument, InstrumentRef):
             raise ValueError("instrument must be an InstrumentRef instance.")
 
-        object.__setattr__(self, "net_quantity", _coerce_decimal(self.net_quantity, "net_quantity"))
+        object.__setattr__(
+            self, "net_quantity", _coerce_decimal(self.net_quantity, "net_quantity")
+        )
         object.__setattr__(
             self,
             "captured_at",
@@ -82,7 +114,9 @@ class PositionSnapshot(SerializableContract):
                     raise ValueError(f"{field_name} must be greater than 0.")
                 object.__setattr__(self, field_name, decimal_value)
 
-        object.__setattr__(self, "realized_pnl", _coerce_decimal(self.realized_pnl, "realized_pnl"))
+        object.__setattr__(
+            self, "realized_pnl", _coerce_decimal(self.realized_pnl, "realized_pnl")
+        )
         object.__setattr__(
             self,
             "unrealized_pnl",
@@ -102,8 +136,12 @@ class AccountSummary(SerializableContract):
     margin_used: Decimal | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "summary_id", _require_non_empty(self.summary_id, "summary_id"))
-        object.__setattr__(self, "account_id", _require_non_empty(self.account_id, "account_id"))
+        object.__setattr__(
+            self, "summary_id", _require_non_empty(self.summary_id, "summary_id")
+        )
+        object.__setattr__(
+            self, "account_id", _require_non_empty(self.account_id, "account_id")
+        )
         object.__setattr__(self, "equity", _coerce_decimal(self.equity, "equity"))
         object.__setattr__(
             self,
@@ -122,8 +160,10 @@ class AccountSummary(SerializableContract):
             if value is not None:
                 decimal_value = _coerce_decimal(value, field_name)
                 if decimal_value < Decimal("0"):
-                    raise ValueError(f"{field_name} must be greater than or equal to 0.")
+                    raise ValueError(
+                        f"{field_name} must be greater than or equal to 0."
+                    )
                 object.__setattr__(self, field_name, decimal_value)
 
 
-__all__ = ["AccountSummary", "PositionSnapshot", "TargetPosition"]
+__all__ = ["AccountSummary", "PositionSnapshot", "PriceMark", "TargetPosition"]

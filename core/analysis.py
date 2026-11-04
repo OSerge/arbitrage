@@ -1,168 +1,80 @@
-import logging
-from typing import Dict, List, Tuple
-import pandas as pd
+"""Legacy analysis names delegated to shared, validated research functions."""
+
+from datetime import UTC, datetime
+from itertools import combinations
+
 import numpy as np
-from statsmodels.tsa.stattools import coint, adfuller
+import pandas as pd
+from statsmodels.tsa.stattools import adfuller
 
 from core.interfaces import IAnalyzer
-
-logger = logging.getLogger(__name__)
+from statarb.data.bars import prepare_pair_bars
+from statarb.research.models import estimate_model, rolling_zscore, select_models
 
 
 class DataAnalyzer(IAnalyzer):
-    """Класс для анализа коинтеграции
-    
-    Формат данных в исходных .csv:
-    ```
-    time,close,open,high,low,volume
-    1742191200,139800.0,139800.0,139800.0,139800.0,10
-    1742194800,139587.0,139351.0,139715.0,139220.0,31
-    1742198400,139975.0,139827.0,140080.0,139500.0,16
-    ...
-    ```
-
-    Формат данных в .csv после join_pair:
-    ```
-    time,close_1,close_2
-    1742191200,139800.0,139800.0
-    1742194800,139587.0,139351.0
-    ...
-    ```
-    """
-    
-    def __init__(self, alpha: float = 0.05):
-        """
-        Инициализация анализатора коинтеграции
-        
-        Args:
-            alpha (float): Уровень значимости для тестов (по умолчанию 0.05)
-        """
+    def __init__(self, alpha=0.05):
+        if not 0 < alpha < 1:
+            raise ValueError("alpha must be within (0, 1).")
         self.alpha = alpha
-    
-    def check_stationarity(self, series: pd.Series) -> Tuple[float, bool]:
-        """
-        Проверяет стационарность временного ряда
-        
-        Args:
-            series (pd.Series): Временной ряд для проверки
-            
-        Returns:
-            Tuple[float, bool]: (p-value, является ли ряд стационарным)
-        """
-        result = adfuller(series)
-        p_value = result[1]
-        return p_value, p_value < self.alpha
-    
-    def engle_granger_test(self, series1: pd.Series, series2: pd.Series) -> Dict:
-        """
-        Тест коинтеграции Энгла-Грейнджера
-        
-        Args:
-            series1 (pd.Series): Первый временной ряд
-            series2 (pd.Series): Второй временной ряд
-            
-        Returns:
-            Dict: Результаты теста коинтеграции
-        """
-        score, pvalue, _ = coint(series1, series2)
-        X = np.column_stack([np.ones(len(series1)), series2])
-        beta = np.linalg.lstsq(X, series1, rcond=None)[0]
-        
-        return {
-            'alpha': beta[0],
-            'beta': beta[1],
-            'adf_statistic': score,
-            'p_value': pvalue,
-            'is_cointegrated': pvalue < self.alpha
-        }
-    
-    def calculate_zscore(self, series1: pd.Series, series2: pd.Series, 
-                        beta: float, lookback: int, alpha: float = 0.0) -> pd.Series:
-        """
-        Расчет Z-score для пары инструментов
-        
-        Args:
-            series1 (pd.Series): Первый временной ряд
-            series2 (pd.Series): Второй временной ряд
-            beta (float): Коэффициент коинтеграции
-            lookback (int): Размер окна для расчета
-            alpha (float): Константа сдвига
-            
-        Returns:
-            pd.Series: Z-score
-        """
-        # Спред c учётом константы alpha (сдвига), получаемой из регрессии
-        spread = series1 - beta * series2 - alpha
-        spread_series = pd.Series(spread)
-        
-        spread_mean = spread_series.rolling(lookback).mean()
-        spread_std = spread_series.rolling(lookback).std()
-        
-        return (spread - spread_mean) / spread_std
-    
-    def check_cointegration(self, series1: pd.Series, series2: pd.Series) -> Dict:
-        """
-        Проверяет коинтеграцию между двумя рядами
-        
-        Args:
-            series1 (pd.Series): Первый временной ряд
-            series2 (pd.Series): Второй временной ряд
-            
-        Returns:
-            Dict: Результаты анализа коинтеграции
-        """
-        return self.engle_granger_test(series1, series2)
-    
-    def find_cointegrated_pairs(self, df: pd.DataFrame) -> List[Dict]:
-        """
-        Находит все коинтегрированные пары в датафрейме
-        
-        Args:
-            df (pd.DataFrame): Датафрейм с временными рядами
-            
-        Returns:
-            List[Dict]: Список коинтегрированных пар с результатами анализа
-        """
-        cointegrated_pairs = []
-        columns = df.columns
-        
-        for i in range(len(columns)):
-            for j in range(i + 1, len(columns)):
-                col1, col2 = columns[i], columns[j]
-                result = self.check_cointegration(df[col1], df[col2])
-                
-                if result['is_cointegrated']:
-                    cointegrated_pairs.append({
-                        'pair': (col1, col2),
-                        'results': result
-                    })
-        
-        return cointegrated_pairs
-    
-    @staticmethod
-    def join_pair(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
-        """
-        Склеивает загруженные датафреймы фьючерсов по времени.
 
-        Возвращает DataFrame, где столбцы — это 'close_1' и 'close_2'.
-        """
-        # Создаем копии датафреймов для безопасности
-        df1_copy = df1.copy()
-        df2_copy = df2.copy()
-        
-        # Преобразуем время в datetime и устанавливаем как индекс
-        df1_copy['time'] = pd.to_datetime(df1_copy['time'], unit='s')
-        df2_copy['time'] = pd.to_datetime(df2_copy['time'], unit='s')
-        
-        df1_copy.set_index('time', inplace=True)
-        df2_copy.set_index('time', inplace=True)
-        
-        # Объединяем по времени
-        return pd.merge(
-            df1_copy['close'], 
-            df2_copy['close'], 
-            left_index=True, 
-            right_index=True, 
-            suffixes=("_1", "_2")
+    def check_stationarity(self, series):
+        values = np.asarray(series, dtype=float)
+        if values.ndim != 1 or len(values) < 12 or not np.isfinite(values).all():
+            raise ValueError("Stationarity requires at least 12 finite observations.")
+        p = float(adfuller(values, autolag="AIC")[1]) if np.ptp(values) else 0.0
+        return p, p < self.alpha
+
+    def engle_granger_test(self, series1, series2):
+        model = estimate_model(
+            series1,
+            series2,
+            fitted_until=datetime(1970, 1, 1, tzinfo=UTC),
+            significance=self.alpha,
+        )
+        return {
+            "alpha": model.alpha,
+            "beta": model.beta,
+            "adf_statistic": model.statistic,
+            "p_value": model.p_value,
+            "is_cointegrated": model.eligible,
+            "reason": model.reason,
+        }
+
+    def check_cointegration(self, series1, series2):
+        return self.engle_granger_test(series1, series2)
+
+    def calculate_zscore(self, series1, series2, beta, lookback, alpha=0.0):
+        return rolling_zscore(
+            pd.Series(series1), pd.Series(series2), beta, lookback, alpha
+        )
+
+    def find_cointegrated_pairs(self, df):
+        if not isinstance(df.index, pd.DatetimeIndex) or df.index.tz is None:
+            raise ValueError(
+                "Pair selection requires timestamp-aligned formation prices in UTC."
             )
-    
+        histories = {}
+        for left, right in combinations(df.columns, 2):
+            paired = df[[left, right]].dropna()
+            histories[(left, right)] = tuple(
+                paired[col].to_numpy() for col in (left, right)
+            )
+        models = select_models(
+            histories,
+            fitted_until=df.index.max().to_pydatetime(),
+            significance=self.alpha,
+        )
+        return [
+            {
+                "pair": pair,
+                "results": {**model.to_dict(), "is_cointegrated": model.eligible},
+            }
+            for pair, model in models.items()
+            if model.eligible
+        ]
+
+    @staticmethod
+    def join_pair(df1, df2, *, timeframe_seconds=3600):
+        bars = prepare_pair_bars(df1, df2, timeframe_seconds=timeframe_seconds)
+        return pd.DataFrame({"close_1": bars.left.close, "close_2": bars.right.close})

@@ -2,6 +2,8 @@
 
 Статус: foundation
 
+ADR 0005 adds the causal `ModelSnapshot`, strategy state, funded `BacktestRequest` and auditable `BacktestResult` interfaces. See [causal-futures-research.md](causal-futures-research.md). Research intents still exclude quantities; old scalar-beta historical returns are retired.
+
 ## Contract: ResearchRun
 
 - layer: research

@@ -19,15 +19,21 @@ from statarb.adapters.alor.http_market_data import (
     normalize_securities_response,
 )
 from statarb.config import AlorContour
-from statarb.data.alor_discovery import discover_history_dataset_manifests, find_latest_history_dataset_manifest
-from statarb.data.alor_reference import require_symbol_board_enrichment, resolve_symbol_board_enrichment
+from statarb.data.alor_discovery import (
+    discover_history_dataset_manifests,
+    find_latest_history_dataset_manifest,
+)
+from statarb.data.alor_reference import (
+    require_symbol_board_enrichment,
+    resolve_symbol_board_enrichment,
+)
 from statarb.data.alor_storage import (
     StoredDatasetBatch,
     ingest_available_boards_payload,
     ingest_history_payload,
     ingest_security_payload,
 )
-from statarb.domain import InstrumentType
+from statarb.domain import InstrumentCatalog, InstrumentType
 from statarb.runtime.alor_pair_bootstrap import run_alor_pair_bootstrap
 
 DEFAULT_PUBLIC_DATA_DELAY_MINUTES = 15
@@ -41,14 +47,18 @@ class AlorHttpResponse:
 
 
 class AlorHttpClient(Protocol):
-    def execute(self, request: HttpRequestShape, *, timeout_seconds: float) -> AlorHttpResponse: ...
+    def execute(
+        self, request: HttpRequestShape, *, timeout_seconds: float
+    ) -> AlorHttpResponse: ...
 
 
 class RequestsAlorHttpClient:
     def __init__(self, *, session: requests.Session | None = None) -> None:
         self._session = session or requests.Session()
 
-    def execute(self, request: HttpRequestShape, *, timeout_seconds: float) -> AlorHttpResponse:
+    def execute(
+        self, request: HttpRequestShape, *, timeout_seconds: float
+    ) -> AlorHttpResponse:
         response = self._session.request(
             method=request.method,
             url=request.url,
@@ -146,7 +156,9 @@ def fetch_public_securities(
         http_request,
         timeout_seconds=timeout_seconds,
     )
-    payload = _sequence_or_mapping_payload(response.payload, endpoint_name="public Alor securities")
+    payload = _sequence_or_mapping_payload(
+        response.payload, endpoint_name="public Alor securities"
+    )
     observed_at = _coerce_utc_datetime(fetched_at_utc or datetime.now(tz=UTC))
     batch = ingest_security_payload(
         storage_root=Path(storage_root),
@@ -209,7 +221,9 @@ def fetch_public_available_boards(
     )
 
 
-def main(argv: list[str] | None = None, *, http_client: AlorHttpClient | None = None) -> int:
+def main(
+    argv: list[str] | None = None, *, http_client: AlorHttpClient | None = None
+) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
     if args.command == "history":
@@ -327,10 +341,14 @@ def main(argv: list[str] | None = None, *, http_client: AlorHttpClient | None = 
         if args.latest:
             match = find_latest_history_dataset_manifest(**query)
             if match is None:
-                raise FileNotFoundError("No matching Alor history dataset manifests found.")
+                raise FileNotFoundError(
+                    "No matching Alor history dataset manifests found."
+                )
             _print_summary(match.to_dict())
             return 0
-        _print_summary([match.to_dict() for match in discover_history_dataset_manifests(**query)])
+        _print_summary(
+            [match.to_dict() for match in discover_history_dataset_manifests(**query)]
+        )
         return 0
     if args.command == "pair-bootstrap":
         result = run_alor_pair_bootstrap(
@@ -353,6 +371,11 @@ def main(argv: list[str] | None = None, *, http_client: AlorHttpClient | None = 
             instrument_type=InstrumentType.coerce(args.instrument_type),
             journal_path=args.journal_path,
             run_smoke=not args.skip_smoke,
+            instrument_catalog=InstrumentCatalog.load(args.specifications)
+            if args.specifications
+            else None,
+            pair_budget=args.pair_budget,
+            max_hedge_error=args.max_hedge_error,
         )
         _print_summary(result.to_dict())
         return 0
@@ -380,7 +403,9 @@ def _build_parser() -> argparse.ArgumentParser:
         description="Fetch, discover, enrich, and bootstrap local Alor datasets for the MVP.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
-    history = subparsers.add_parser("history", help="Fetch historical bars from public Alor HTTP API.")
+    history = subparsers.add_parser(
+        "history", help="Fetch historical bars from public Alor HTTP API."
+    )
     history.add_argument("--symbol", required=True)
     history.add_argument("--exchange", default="MOEX")
     history.add_argument("--instrument-group")
@@ -402,7 +427,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     history.add_argument("--request-id")
     history.add_argument("--storage-root", default=str(_project_root()))
-    history.add_argument("--timeout-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS)
+    history.add_argument(
+        "--timeout-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS
+    )
 
     securities = subparsers.add_parser(
         "securities",
@@ -428,7 +455,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     securities.add_argument("--request-id")
     securities.add_argument("--storage-root", default=str(_project_root()))
-    securities.add_argument("--timeout-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS)
+    securities.add_argument(
+        "--timeout-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS
+    )
 
     available_boards = subparsers.add_parser(
         "available-boards",
@@ -443,7 +472,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     available_boards.add_argument("--request-id")
     available_boards.add_argument("--storage-root", default=str(_project_root()))
-    available_boards.add_argument("--timeout-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS)
+    available_boards.add_argument(
+        "--timeout-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS
+    )
 
     discover = subparsers.add_parser(
         "discover",
@@ -484,6 +515,16 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     pair_bootstrap.add_argument("--journal-path")
     pair_bootstrap.add_argument("--skip-smoke", action="store_true")
+    pair_bootstrap.add_argument(
+        "--specifications",
+        help="Explicit effective-dated futures InstrumentCatalog JSON",
+    )
+    pair_bootstrap.add_argument(
+        "--pair-budget", help="Explicit gross-notional RUB budget"
+    )
+    pair_bootstrap.add_argument(
+        "--max-hedge-error", help="Explicit relative rounding error tolerance"
+    )
     pair_bootstrap.add_argument("--storage-root", default=str(_project_root()))
 
     resolve_symbol = subparsers.add_parser(

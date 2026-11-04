@@ -2,6 +2,8 @@
 
 Статус: foundation
 
+Approved accounting update (2026-11-04, ADR 0005): integer futures quantities, independent `PriceMark` inputs, conservative ГО, atomic paper target groups, terminal FILLED events and reconstructed checkpoint parity are specified in [causal-futures-research.md](causal-futures-research.md). For futures, `available_cash` means marked free collateral; `buying_power=max(0, available_cash)`. Insufficient collateral is rejected before publishing any leg.
+
 ## Contract: TargetPosition
 
 - layer: portfolio

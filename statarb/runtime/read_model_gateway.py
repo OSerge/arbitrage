@@ -4,7 +4,6 @@ import argparse
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from decimal import Decimal
 from pathlib import Path
 
 from statarb.domain.orders import OrderEvent
@@ -157,7 +156,9 @@ def _build_research_read_model(journal_path: Path) -> ResearchReadModel:
 def _build_risk_read_model(journal_path: Path, *, ops: OpsReadModel) -> RiskReadModel:
     records = load_event_journal(journal_path)
     latest_positions: dict[str, PositionSnapshot] = {}
-    latest_equity: str | None = ops.latest_account_summary["equity"] if ops.latest_account_summary else None
+    latest_equity: str | None = (
+        ops.latest_account_summary["equity"] if ops.latest_account_summary else None
+    )
     for record in records:
         event = decode_event_record(record)
         if isinstance(event, PositionSnapshot):

@@ -1,5 +1,7 @@
 # Анализ актуальных исследований по статистическому арбитражу и предложения по улучшению проекта
 
+> Обновление 2026-11-04: это историческая research-заметка. Прежние утверждения ниже об отсутствии look-ahead и корректном учёте издержек опровергнуты аудитом. Исправленный baseline, условия финансового запуска и проверки зафиксированы в `docs/adr/0005-causal-futures-research-and-shared-paper-ledger.md` и `docs/superpowers/contracts/causal-futures-research.md`. Старые показатели и примеры `ImprovedBacktester(series1, series2, config=...)` требуют миграции и пересчёта.
+
 ## Обзор проанализированных статей
 
 ### 1. "Copula-Based Trading of Cointegrated Cryptocurrency Pairs" (2023)

@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Canonical event contracts and shared serialization helpers."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass, fields, is_dataclass
 from datetime import datetime
@@ -19,17 +19,19 @@ def _require_non_empty(value: str, field_name: str) -> str:
 def _require_aware_datetime(value: datetime, field_name: str) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError(f"{field_name} must be timezone-aware.")
-    return value
+    from datetime import UTC
+
+    return value.astimezone(UTC)
 
 
 def _coerce_decimal(value: Decimal | int | float | str, field_name: str) -> Decimal:
-    if isinstance(value, Decimal):
-        return value
-
     try:
-        return Decimal(str(value))
+        result = value if isinstance(value, Decimal) else Decimal(str(value))
     except (InvalidOperation, ValueError) as exc:
         raise ValueError(f"{field_name} must be a decimal-compatible value.") from exc
+    if not result.is_finite():
+        raise ValueError(f"{field_name} must be finite.")
+    return result
 
 
 def _serialize_value(value: Any) -> Any:
@@ -54,7 +56,9 @@ def _serialize_value(value: Any) -> Any:
 class SerializableContract:
     def to_dict(self) -> dict[str, Any]:
         if not is_dataclass(self):
-            raise TypeError("SerializableContract.to_dict() requires a dataclass instance.")
+            raise TypeError(
+                "SerializableContract.to_dict() requires a dataclass instance."
+            )
         return {
             field.name: _serialize_value(getattr(self, field.name))
             for field in fields(self)
@@ -78,7 +82,9 @@ class ExecutionContour(StrEnum):
                 return member
 
         allowed = ", ".join(member.value for member in cls)
-        raise ValueError(f"Unsupported execution contour: {value!r}. Expected one of: {allowed}.")
+        raise ValueError(
+            f"Unsupported execution contour: {value!r}. Expected one of: {allowed}."
+        )
 
 
 class EventSource(StrEnum):
@@ -107,7 +113,9 @@ class ReplaySessionStatus(StrEnum):
                 return member
 
         allowed = ", ".join(member.value for member in cls)
-        raise ValueError(f"Unsupported replay session status: {value!r}. Expected one of: {allowed}.")
+        raise ValueError(
+            f"Unsupported replay session status: {value!r}. Expected one of: {allowed}."
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,10 +130,16 @@ class ReplaySession(SerializableContract):
     notes: str | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "session_id", _require_non_empty(self.session_id, "session_id"))
-        object.__setattr__(self, "started_at", _require_aware_datetime(self.started_at, "started_at"))
+        object.__setattr__(
+            self, "session_id", _require_non_empty(self.session_id, "session_id")
+        )
+        object.__setattr__(
+            self, "started_at", _require_aware_datetime(self.started_at, "started_at")
+        )
         object.__setattr__(self, "status", ReplaySessionStatus.coerce(self.status))
-        object.__setattr__(self, "source_contour", ExecutionContour.coerce(self.source_contour))
+        object.__setattr__(
+            self, "source_contour", ExecutionContour.coerce(self.source_contour)
+        )
 
         if self.source_event_count < 0:
             raise ValueError("source_event_count must be greater than or equal to 0.")
@@ -133,9 +147,13 @@ class ReplaySession(SerializableContract):
             raise ValueError("replayed_event_count must be greater than or equal to 0.")
 
         if self.ended_at is not None:
-            object.__setattr__(self, "ended_at", _require_aware_datetime(self.ended_at, "ended_at"))
+            object.__setattr__(
+                self, "ended_at", _require_aware_datetime(self.ended_at, "ended_at")
+            )
             if self.ended_at < self.started_at:
-                raise ValueError("ended_at must be greater than or equal to started_at.")
+                raise ValueError(
+                    "ended_at must be greater than or equal to started_at."
+                )
 
         if self.notes is not None:
             notes = self.notes.strip()

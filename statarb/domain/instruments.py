@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Canonical instrument contracts."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
@@ -26,7 +26,9 @@ class InstrumentType(StrEnum):
                 return member
 
         allowed = ", ".join(member.value for member in cls)
-        raise ValueError(f"Unsupported instrument type: {value!r}. Expected one of: {allowed}.")
+        raise ValueError(
+            f"Unsupported instrument type: {value!r}. Expected one of: {allowed}."
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,8 +39,12 @@ class InstrumentRef(SerializableContract):
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "symbol", _require_non_empty(self.symbol, "symbol"))
-        object.__setattr__(self, "exchange", _require_non_empty(self.exchange, "exchange"))
-        object.__setattr__(self, "instrument_type", InstrumentType.coerce(self.instrument_type))
+        object.__setattr__(
+            self, "exchange", _require_non_empty(self.exchange, "exchange")
+        )
+        object.__setattr__(
+            self, "instrument_type", InstrumentType.coerce(self.instrument_type)
+        )
 
 
 __all__ = ["InstrumentRef", "InstrumentType"]

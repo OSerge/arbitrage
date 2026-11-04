@@ -48,7 +48,15 @@ def load_history_bars_dataset(
         )
 
     normalized_path = Path(storage_root) / manifest.storage_uri
-    frame = pd.read_parquet(normalized_path).sort_values("bar_start_utc").reset_index(drop=True)
+    frame = (
+        pd.read_parquet(normalized_path)
+        .sort_values("bar_start_utc")
+        .reset_index(drop=True)
+    )
+    if len(frame) != manifest.row_count:
+        raise ValueError(
+            "Historical artifact row count differs from its immutable manifest."
+        )
     records = tuple(_record_from_row(row) for row in frame.to_dict(orient="records"))
     return LoadedAlorHistoryBarsDataset(
         manifest=manifest,

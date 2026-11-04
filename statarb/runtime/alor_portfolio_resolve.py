@@ -7,7 +7,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
-from statarb.adapters.alor.auth import AlorAuthConfig, TokenExchangeRequest, TokenLifecycleManager
+from statarb.adapters.alor.auth import (
+    AlorAuthConfig,
+    TokenExchangeRequest,
+    TokenLifecycleManager,
+)
 from statarb.adapters.alor.jwt_portfolios import (
     AlorJwtPortfolioError,
     decode_jwt_payload,
@@ -17,7 +21,6 @@ from statarb.adapters.alor.jwt_portfolios import (
 from statarb.config import AlorContour, RuntimeSettings, load_settings
 from statarb.runtime.alor_test_read_only import (
     DEFAULT_CLIENT_NAME,
-    DEFAULT_TIMEOUT_SECONDS,
     RequestsAlorAuthClient,
 )
 
@@ -53,7 +56,9 @@ def discover_jwt_portfolios(
 ) -> JwtPortfolioDiscoveryResult:
     _require_refresh_token(settings)
     token_manager = TokenLifecycleManager(
-        config=AlorAuthConfig.from_settings(settings.alor, client_name=DEFAULT_CLIENT_NAME)
+        config=AlorAuthConfig.from_settings(
+            settings.alor, client_name=DEFAULT_CLIENT_NAME
+        )
     )
     issued_at = _coerce_utc_datetime(now or datetime.now(UTC))
     auth_payload = auth_client.exchange(token_manager.build_refresh_request())

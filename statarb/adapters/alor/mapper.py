@@ -1,15 +1,22 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from enum import StrEnum
+import re
 from typing import Any, Protocol, runtime_checkable
 
 from statarb.domain.events import ExecutionContour, _coerce_decimal, _require_non_empty
 from statarb.domain.instruments import InstrumentRef, InstrumentType
-from statarb.domain.orders import FillEvent, OrderEvent, OrderSide, OrderStatus, OrderType
+from statarb.domain.orders import (
+    FillEvent,
+    OrderEvent,
+    OrderSide,
+    OrderStatus,
+    OrderType,
+)
 from statarb.domain.positions import AccountSummary, PositionSnapshot
 
 
@@ -35,7 +42,13 @@ class CanonicalEventPlaceholder:
     payload: Mapping[str, object]
 
 
-AlorMappedEvent = OrderEvent | FillEvent | PositionSnapshot | AccountSummary | CanonicalEventPlaceholder
+AlorMappedEvent = (
+    OrderEvent
+    | FillEvent
+    | PositionSnapshot
+    | AccountSummary
+    | CanonicalEventPlaceholder
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +57,8 @@ class AlorMappingContext:
     exchange: str = "MOEX"
     contour: ExecutionContour = ExecutionContour.BROKER_TEST
     captured_at: datetime | None = None
+    instruments: Mapping[str, InstrumentRef] | None = None
+    lot_sizes: Mapping[str, Decimal] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,7 +169,11 @@ class CanonicalAlorMapper:
             events = tuple(
                 event
                 for row in rows
-                for event in self._map_item(handler, _as_mapping(row, field_name=f"{handler} row"), context=mapping_context)
+                for event in self._map_item(
+                    handler,
+                    _as_mapping(row, field_name=f"{handler} row"),
+                    context=mapping_context,
+                )
             )
         else:
             return MappingResult(
@@ -187,13 +206,15 @@ class CanonicalAlorMapper:
         raise ValueError(f"Unsupported Alor mapping kind: {kind!r}.")
 
 
-def map_alor_order(item: Mapping[str, Any], *, context: AlorMappingContext) -> OrderEvent:
+def map_alor_order(
+    item: Mapping[str, Any], *, context: AlorMappingContext
+) -> OrderEvent:
     order_id = _required_text(item, "id")
     symbol = _required_text(item, "symbol", "sym")
     exchange = _optional_text(item, "exchange", "ex") or context.exchange
     order_type = _map_order_type(_required_text(item, "type"))
     side = _map_order_side(_required_text(item, "side"))
-    quantity = _quantity_units(item)
+    quantity = _quantity_units(item, context=context)
     status = _map_order_status(item)
     occurred_at = _parse_alor_datetime(
         _optional_text(item, "updateTime", "update_time")
@@ -205,7 +226,7 @@ def map_alor_order(item: Mapping[str, Any], *, context: AlorMappingContext) -> O
     return OrderEvent(
         event_id=f"alor-order:{order_id}:{occurred_at.isoformat()}",
         order_id=order_id,
-        instrument=_instrument_ref(symbol, exchange),
+        instrument=_instrument_ref(symbol, exchange, context=context),
         order_type=order_type,
         side=side,
         quantity=quantity,
@@ -217,13 +238,15 @@ def map_alor_order(item: Mapping[str, Any], *, context: AlorMappingContext) -> O
     )
 
 
-def map_alor_trade(item: Mapping[str, Any], *, context: AlorMappingContext) -> FillEvent:
+def map_alor_trade(
+    item: Mapping[str, Any], *, context: AlorMappingContext
+) -> FillEvent:
     fill_id = _required_text(item, "id")
     order_id = _required_text(item, "orderno", "orderNo", "order_no")
     symbol = _required_text(item, "symbol", "sym")
     exchange = _optional_text(item, "exchange", "ex") or context.exchange
     side = _map_order_side(_required_text(item, "side"))
-    fill_quantity = _quantity_units(item)
+    fill_quantity = _quantity_units(item, context=context)
     fill_price = _coerce_decimal(_required_value(item, "price"), "fill_price")
     occurred_at = _parse_alor_datetime(_required_text(item, "date"))
     commission = _optional_decimal(item, "commission") or Decimal("0")
@@ -231,7 +254,7 @@ def map_alor_trade(item: Mapping[str, Any], *, context: AlorMappingContext) -> F
         event_id=f"alor-fill:{fill_id}:{occurred_at.isoformat()}",
         fill_id=fill_id,
         order_id=order_id,
-        instrument=_instrument_ref(symbol, exchange),
+        instrument=_instrument_ref(symbol, exchange, context=context),
         side=side,
         fill_quantity=fill_quantity,
         fill_price=fill_price,
@@ -242,18 +265,22 @@ def map_alor_trade(item: Mapping[str, Any], *, context: AlorMappingContext) -> F
     )
 
 
-def map_alor_position(item: Mapping[str, Any], *, context: AlorMappingContext) -> PositionSnapshot | None:
+def map_alor_position(
+    item: Mapping[str, Any], *, context: AlorMappingContext
+) -> PositionSnapshot | None:
     if _optional_bool(item, "isCurrency", "is_currency") is True:
         return None
     symbol = _required_text(item, "symbol", "sym")
     exchange = _optional_text(item, "exchange", "ex") or context.exchange
     captured_at = context.captured_at or datetime.now(UTC)
-    net_quantity = _coerce_decimal(_required_value(item, "qtyUnits", "qty_units", "qty"), "net_quantity")
+    net_quantity = _quantity_units(item, context=context)
     average_price = _optional_decimal(item, "avgPrice", "avg_price")
-    unrealized_pnl = _optional_decimal(item, "unrealisedPl", "unrealised_pl") or Decimal("0")
+    unrealized_pnl = _optional_decimal(
+        item, "unrealisedPl", "unrealised_pl"
+    ) or Decimal("0")
     return PositionSnapshot(
         snapshot_id=f"alor-position:{context.portfolio}:{exchange}:{symbol}:{captured_at.isoformat()}",
-        instrument=_instrument_ref(symbol, exchange),
+        instrument=_instrument_ref(symbol, exchange, context=context),
         net_quantity=net_quantity,
         captured_at=_require_aware(captured_at),
         contour=context.contour,
@@ -262,10 +289,16 @@ def map_alor_position(item: Mapping[str, Any], *, context: AlorMappingContext) -
     )
 
 
-def map_alor_summary(item: Mapping[str, Any], *, context: AlorMappingContext) -> AccountSummary:
+def map_alor_summary(
+    item: Mapping[str, Any], *, context: AlorMappingContext
+) -> AccountSummary:
     captured_at = context.captured_at or datetime.now(UTC)
-    equity = _coerce_decimal(_required_value(item, "portfolioEvaluation", "portfolio_evaluation"), "equity")
-    buying_power = _coerce_decimal(_required_value(item, "buyingPower", "buying_power"), "buying_power")
+    equity = _coerce_decimal(
+        _required_value(item, "portfolioEvaluation", "portfolio_evaluation"), "equity"
+    )
+    buying_power = _coerce_decimal(
+        _required_value(item, "buyingPower", "buying_power"), "buying_power"
+    )
     margin_used = _optional_decimal(item, "initialMargin", "initial_margin")
     return AccountSummary(
         summary_id=f"alor-summary:{context.portfolio}:{captured_at.isoformat()}",
@@ -281,16 +314,15 @@ def map_alor_summary(item: Mapping[str, Any], *, context: AlorMappingContext) ->
 
 def _require_context(context: AlorMappingContext | None) -> AlorMappingContext:
     if context is None:
-        raise ValueError("Canonical Alor mapping requires an AlorMappingContext with portfolio.")
+        raise ValueError(
+            "Canonical Alor mapping requires an AlorMappingContext with portfolio."
+        )
     portfolio = context.portfolio.strip()
     if not portfolio:
-        raise ValueError("Canonical Alor mapping requires a non-empty portfolio identifier.")
-    return AlorMappingContext(
-        portfolio=portfolio,
-        exchange=context.exchange,
-        contour=context.contour,
-        captured_at=context.captured_at,
-    )
+        raise ValueError(
+            "Canonical Alor mapping requires a non-empty portfolio identifier."
+        )
+    return replace(context, portfolio=portfolio)
 
 
 def _unwrap_ws_payload(payload: Mapping[str, object]) -> Mapping[str, Any]:
@@ -307,7 +339,9 @@ def _payload_as_mapping(payload: Any) -> Mapping[str, object]:
 
 
 def _as_sequence(payload: Any, *, field_name: str) -> Sequence[Any]:
-    if isinstance(payload, Sequence) and not isinstance(payload, (str, bytes, bytearray)):
+    if isinstance(payload, Sequence) and not isinstance(
+        payload, (str, bytes, bytearray)
+    ):
         return payload
     raise ValueError(f"Alor {field_name} must be a JSON array.")
 
@@ -363,14 +397,26 @@ def _optional_bool(item: Mapping[str, Any], *keys: str) -> bool | None:
                 return True
             if normalized in {"false", "0", "no"}:
                 return False
-        raise ValueError(f"Alor payload field {key!r} must be a boolean-compatible value.")
+        raise ValueError(
+            f"Alor payload field {key!r} must be a boolean-compatible value."
+        )
     return None
 
 
-def _quantity_units(item: Mapping[str, Any]) -> Decimal:
+def _quantity_units(item: Mapping[str, Any], *, context: AlorMappingContext) -> Decimal:
     if "qtyUnits" in item or "qty_units" in item:
-        return _coerce_decimal(_required_value(item, "qtyUnits", "qty_units"), "quantity")
-    return _coerce_decimal(_required_value(item, "qty"), "quantity")
+        return _coerce_decimal(
+            _required_value(item, "qtyUnits", "qty_units"), "quantity"
+        )
+    symbol = _required_text(item, "symbol", "sym")
+    if context.lot_sizes is None or symbol not in context.lot_sizes:
+        raise ValueError(
+            "qty in lots requires an explicit reference lot size; qtyUnits is preferred."
+        )
+    lot_size = _coerce_decimal(context.lot_sizes[symbol], "lot_size")
+    if lot_size <= 0:
+        raise ValueError("lot_size must be positive.")
+    return _coerce_decimal(_required_value(item, "qty"), "quantity") * lot_size
 
 
 def _map_order_type(value: str) -> OrderType:
@@ -393,7 +439,9 @@ def _map_order_side(value: str) -> OrderSide:
 
 def _map_order_status(item: Mapping[str, Any]) -> OrderStatus:
     status = _required_text(item, "status").lower()
-    filled_units = _optional_decimal(item, "filledQtyUnits", "filled_qty_units", "filled")
+    filled_units = _optional_decimal(
+        item, "filledQtyUnits", "filled_qty_units", "filled"
+    )
     if status == "working" and filled_units is not None and filled_units > Decimal("0"):
         return OrderStatus.PARTIALLY_FILLED
     mapping = {
@@ -409,7 +457,16 @@ def _map_order_status(item: Mapping[str, Any]) -> OrderStatus:
     return mapped
 
 
-def _instrument_ref(symbol: str, exchange: str) -> InstrumentRef:
+def _instrument_ref(
+    symbol: str, exchange: str, *, context: AlorMappingContext | None = None
+) -> InstrumentRef:
+    if context is not None and context.instruments is not None:
+        if symbol not in context.instruments:
+            raise ValueError(f"Missing instrument identity for {symbol}.")
+        instrument = context.instruments[symbol]
+        if instrument.exchange != exchange:
+            raise ValueError("Instrument reference exchange mismatch.")
+        return instrument
     return InstrumentRef(
         symbol=symbol,
         exchange=exchange,
@@ -420,6 +477,8 @@ def _instrument_ref(symbol: str, exchange: str) -> InstrumentRef:
 def _infer_instrument_type(symbol: str) -> InstrumentType:
     normalized = symbol.strip()
     if "-" in normalized and normalized.split("-")[-1][:1].isdigit():
+        return InstrumentType.FUTURE
+    if re.fullmatch(r"[A-Za-z]{1,6}[FGHJKMNQUVXZ]\d{1,2}", normalized):
         return InstrumentType.FUTURE
     return InstrumentType.EQUITY
 

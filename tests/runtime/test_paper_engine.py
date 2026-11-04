@@ -59,7 +59,7 @@ def test_paper_engine_converts_signal_into_fill_and_journal(tmp_path) -> None:
     order_event = result.order_events[-1]
     fill_event = result.fill_events[-1]
 
-    assert order_event.status is OrderStatus.ACCEPTED
+    assert order_event.status is OrderStatus.FILLED
     assert order_event.side is OrderSide.BUY
     assert order_event.signal_intent_id == signal.intent_id
     assert order_event.target_position_id == result.target_position.target_position_id
@@ -77,12 +77,14 @@ def test_paper_engine_converts_signal_into_fill_and_journal(tmp_path) -> None:
     assert [entry.event_type for entry in journal_entries] == [
         "order_event",
         "fill_event",
+        "order_event",
+        "price_mark",
         "position_snapshot",
         "account_summary",
     ]
     assert journal_entries[0].lineage["signal_intent_id"] == signal.intent_id
     assert (
-        journal_entries[2].lineage["target_position_id"]
+        journal_entries[4].lineage["target_position_id"]
         == result.target_position.target_position_id
     )
 

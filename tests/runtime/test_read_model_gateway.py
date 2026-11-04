@@ -19,7 +19,7 @@ def test_build_mvp_read_model_bundle_from_default_paper_day(tmp_path: Path) -> N
     bundle = build_mvp_read_model_bundle(journal_path)
 
     assert bundle.schema_version == READ_MODEL_SCHEMA_VERSION
-    assert bundle.ops.total_events == 8
+    assert bundle.ops.total_events == 5
     assert bundle.research.source_contours == ("paper",)
     assert bundle.risk.position_symbols == ("SPM5", "SRM5")
     assert bundle.risk.net_exposure_by_symbol["SRM5"]
@@ -46,7 +46,9 @@ def test_main_export_command_prints_manifest_location(tmp_path: Path, capsys) ->
     output_dir = tmp_path / "read-models-cli"
     run_default_paper_trading_day(journal_path=journal_path)
 
-    exit_code = main(["export", "--journal-path", str(journal_path), "--output-dir", str(output_dir)])
+    exit_code = main(
+        ["export", "--journal-path", str(journal_path), "--output-dir", str(output_dir)]
+    )
 
     assert exit_code == 0
     summary = json.loads(capsys.readouterr().out)

@@ -57,8 +57,8 @@ def test_replayer_rebuilds_ledger_from_paper_journal(tmp_path) -> None:
 
     assert replay_result.session.status is ReplaySessionStatus.SUCCEEDED
     assert replay_result.session.source_contour is ExecutionContour.PAPER
-    assert replay_result.session.source_event_count == 4
-    assert replay_result.session.replayed_event_count == 4
+    assert replay_result.session.source_event_count == 6
+    assert replay_result.session.replayed_event_count == 6
 
     assert replay_result.position_snapshot is not None
     assert replay_result.position_snapshot.net_quantity == Decimal("7")
@@ -67,7 +67,13 @@ def test_replayer_rebuilds_ledger_from_paper_journal(tmp_path) -> None:
     assert replay_result.account_summary.available_cash == Decimal("997828.25")
 
     assert paper_result.position_snapshot is not None
-    assert replay_result.position_snapshot.net_quantity == paper_result.position_snapshot.net_quantity
-    assert replay_result.position_snapshot.average_price == paper_result.position_snapshot.average_price
+    assert (
+        replay_result.position_snapshot.net_quantity
+        == paper_result.position_snapshot.net_quantity
+    )
+    assert (
+        replay_result.position_snapshot.average_price
+        == paper_result.position_snapshot.average_price
+    )
     assert replay_result.account_summary == paper_result.account_summary
     assert records[2].lineage["target_position_id"] == target.target_position_id

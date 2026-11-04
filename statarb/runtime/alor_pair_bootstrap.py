@@ -4,12 +4,21 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from statarb.bridges.historical import HistoricalSmokeBundle, build_historical_pair_bridge_from_alor_datasets
+from statarb.bridges.historical import (
+    HistoricalSmokeBundle,
+    build_historical_pair_bridge_from_alor_datasets,
+)
 from statarb.data.alor_discovery import find_latest_history_dataset_manifest
-from statarb.data.alor_history import LoadedAlorHistoryBarsDataset, load_history_bars_dataset
+from statarb.data.alor_history import (
+    LoadedAlorHistoryBarsDataset,
+    load_history_bars_dataset,
+)
 from statarb.data.alor_reference import require_symbol_board_enrichment
 from statarb.domain import InstrumentType
-from statarb.runtime.historical import HistoricalPaperReplaySmokeResult, run_historical_paper_replay_smoke
+from statarb.runtime.historical import (
+    HistoricalPaperReplaySmokeResult,
+    run_historical_paper_replay_smoke,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,27 +84,34 @@ def run_alor_pair_bootstrap(
     instrument_type: InstrumentType | str = InstrumentType.FUTURE,
     journal_path: str | Path | None = None,
     run_smoke: bool = True,
+    instrument_catalog=None,
+    pair_budget=None,
+    max_hedge_error=None,
 ) -> PairBootstrapResult:
     resolved_storage_root = Path(storage_root)
-    resolved_left_manifest_path, resolved_left_instrument_group = _resolve_manifest_path(
-        storage_root=resolved_storage_root,
-        symbol=left_symbol,
-        exchange=exchange,
-        timeframe=timeframe,
-        instrument_group=instrument_group,
-        from_time=from_time,
-        to_time=to_time,
-        manifest_path=left_manifest_path,
+    resolved_left_manifest_path, resolved_left_instrument_group = (
+        _resolve_manifest_path(
+            storage_root=resolved_storage_root,
+            symbol=left_symbol,
+            exchange=exchange,
+            timeframe=timeframe,
+            instrument_group=instrument_group,
+            from_time=from_time,
+            to_time=to_time,
+            manifest_path=left_manifest_path,
+        )
     )
-    resolved_right_manifest_path, resolved_right_instrument_group = _resolve_manifest_path(
-        storage_root=resolved_storage_root,
-        symbol=right_symbol,
-        exchange=exchange,
-        timeframe=timeframe,
-        instrument_group=instrument_group,
-        from_time=from_time,
-        to_time=to_time,
-        manifest_path=right_manifest_path,
+    resolved_right_manifest_path, resolved_right_instrument_group = (
+        _resolve_manifest_path(
+            storage_root=resolved_storage_root,
+            symbol=right_symbol,
+            exchange=exchange,
+            timeframe=timeframe,
+            instrument_group=instrument_group,
+            from_time=from_time,
+            to_time=to_time,
+            manifest_path=right_manifest_path,
+        )
     )
     left_dataset = load_history_bars_dataset(
         storage_root=resolved_storage_root,
@@ -107,6 +123,20 @@ def run_alor_pair_bootstrap(
     )
     _require_symbol_match(dataset=left_dataset, expected_symbol=left_symbol)
     _require_symbol_match(dataset=right_dataset, expected_symbol=right_symbol)
+    for dataset in (left_dataset, right_dataset):
+        if any(
+            record.exchange != exchange
+            or str(record.timeframe) != str(timeframe)
+            or (instrument_group is not None and record.board != instrument_group)
+            for record in dataset.records
+        ):
+            raise ValueError(
+                "Explicit manifest does not match requested exchange, timeframe or board."
+            )
+    if run_smoke and instrument_catalog is None:
+        raise ValueError(
+            "Paper smoke requires an explicit historical InstrumentCatalog; --skip-smoke for research only."
+        )
 
     bundle = build_historical_pair_bridge_from_alor_datasets(
         left_dataset=left_dataset,
@@ -118,11 +148,17 @@ def run_alor_pair_bootstrap(
         min_estimation_window=min_estimation_window,
         recompute_frequency=recompute_frequency,
         instrument_type=InstrumentType.coerce(instrument_type),
+        instrument_catalog=instrument_catalog,
+        pair_budget=pair_budget,
+        max_hedge_error=max_hedge_error,
+        from_time=from_time,
+        to_time=to_time,
     )
     smoke_result = (
         run_historical_paper_replay_smoke(
             bundle=bundle,
-            journal_path=journal_path or _default_journal_path(resolved_storage_root, bundle),
+            journal_path=journal_path
+            or _default_journal_path(resolved_storage_root, bundle),
         )
         if run_smoke
         else None
@@ -197,7 +233,12 @@ def _require_symbol_match(
 def _default_journal_path(storage_root: Path, bundle: HistoricalSmokeBundle) -> Path:
     pair_slug = "-".join(symbol.lower() for symbol in bundle.source_pair)
     timestamp_slug = bundle.as_of.strftime("%Y%m%dT%H%M%SZ")
-    return storage_root / "artifacts" / "historical-smoke" / f"{pair_slug}-{timestamp_slug}.jsonl"
+    return (
+        storage_root
+        / "artifacts"
+        / "historical-smoke"
+        / f"{pair_slug}-{timestamp_slug}.jsonl"
+    )
 
 
 __all__ = ["PairBootstrapResult", "run_alor_pair_bootstrap"]

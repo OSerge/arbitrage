@@ -5,12 +5,15 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any, Protocol
 
 import requests
 
-from statarb.adapters.alor.auth import AlorAuthConfig, TokenExchangeRequest, TokenLifecycleManager
+from statarb.adapters.alor.auth import (
+    AlorAuthConfig,
+    TokenExchangeRequest,
+    TokenLifecycleManager,
+)
 from statarb.adapters.alor.http_market_data import (
     AlorObjectFormat,
     HttpRequestShape,
@@ -49,7 +52,9 @@ class AlorAuthClient(Protocol):
 
 
 class AlorJsonHttpClient(Protocol):
-    def execute(self, request: HttpRequestShape, *, timeout_seconds: float) -> JsonHttpResponse: ...
+    def execute(
+        self, request: HttpRequestShape, *, timeout_seconds: float
+    ) -> JsonHttpResponse: ...
 
 
 class RequestsAlorAuthClient:
@@ -75,7 +80,9 @@ class RequestsAlorJsonHttpClient:
     def __init__(self, *, session: requests.Session | None = None) -> None:
         self._session = session or requests.Session()
 
-    def execute(self, request: HttpRequestShape, *, timeout_seconds: float) -> JsonHttpResponse:
+    def execute(
+        self, request: HttpRequestShape, *, timeout_seconds: float
+    ) -> JsonHttpResponse:
         response = self._session.request(
             method=request.method,
             url=request.url,
@@ -178,7 +185,9 @@ class ReadOnlySmokeResult:
             "issued_at": self.access_token_issued_at.isoformat(),
             "expires_at": self.access_token_expires_at.isoformat(),
             "expires_in_seconds": int(
-                (self.access_token_expires_at - self.access_token_issued_at).total_seconds()
+                (
+                    self.access_token_expires_at - self.access_token_issued_at
+                ).total_seconds()
             ),
         }
         payload["http"] = [result.to_dict() for result in self.http_results]
@@ -210,7 +219,9 @@ def build_read_only_smoke_plan(
 ) -> ReadOnlySmokePlan:
     _require_test_read_only_settings(settings)
     token_manager = TokenLifecycleManager(
-        config=AlorAuthConfig.from_settings(settings.alor, client_name=DEFAULT_CLIENT_NAME)
+        config=AlorAuthConfig.from_settings(
+            settings.alor, client_name=DEFAULT_CLIENT_NAME
+        )
     )
     return ReadOnlySmokePlan(
         contour=settings.alor.contour,
@@ -258,7 +269,9 @@ def run_read_only_smoke(
 ) -> ReadOnlySmokeResult:
     _require_test_read_only_settings(settings)
     token_manager = TokenLifecycleManager(
-        config=AlorAuthConfig.from_settings(settings.alor, client_name=DEFAULT_CLIENT_NAME)
+        config=AlorAuthConfig.from_settings(
+            settings.alor, client_name=DEFAULT_CLIENT_NAME
+        )
     )
     issued_at = _coerce_utc_datetime(now or datetime.now(UTC))
     auth_payload = auth_client.exchange(token_manager.build_refresh_request())
@@ -282,7 +295,9 @@ def run_read_only_smoke(
             payload=response.payload,
         )
         for surface in http_surfaces
-        for response in (http_client.execute(surface.request, timeout_seconds=timeout_seconds),)
+        for response in (
+            http_client.execute(surface.request, timeout_seconds=timeout_seconds),
+        )
     )
     return ReadOnlySmokeResult(
         plan=build_read_only_smoke_plan(
@@ -422,7 +437,9 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Include canonical event preview mapped from portfolio-scoped HTTP surfaces.",
     )
-    map_preview.add_argument("--timeout-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS)
+    map_preview.add_argument(
+        "--timeout-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS
+    )
     return parser
 
 
@@ -507,7 +524,11 @@ def _build_ws_surfaces(
 ) -> tuple[PlannedWsSurface, ...]:
     if portfolio is None:
         return ()
-    ws_url = "wss://apidev.alor.ru/ws" if contour is AlorContour.TEST else "wss://api.alor.ru/ws"
+    ws_url = (
+        "wss://apidev.alor.ru/ws"
+        if contour is AlorContour.TEST
+        else "wss://api.alor.ru/ws"
+    )
     surfaces = [
         PlannedWsSurface(
             surface="positions",

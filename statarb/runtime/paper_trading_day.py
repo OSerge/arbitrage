@@ -4,11 +4,16 @@ import argparse
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from decimal import Decimal
 from pathlib import Path
 
-from statarb.bridges.historical import HistoricalSmokeBundle, build_default_historical_smoke
-from statarb.runtime.historical import HistoricalPaperReplaySmokeResult, run_historical_paper_replay_smoke
+from statarb.bridges.historical import (
+    HistoricalSmokeBundle,
+    build_default_historical_smoke,
+)
+from statarb.runtime.historical import (
+    HistoricalPaperReplaySmokeResult,
+    run_historical_paper_replay_smoke,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,9 +46,12 @@ class PaperTradingDaySummary:
         }
 
 
-def build_paper_trading_day_summary(result: HistoricalPaperReplaySmokeResult) -> PaperTradingDaySummary:
+def build_paper_trading_day_summary(
+    result: HistoricalPaperReplaySmokeResult,
+) -> PaperTradingDaySummary:
     replay_parity = (
-        result.replay_position_snapshots_by_symbol == result.position_snapshots_by_symbol
+        result.replay_position_snapshots_by_symbol
+        == result.position_snapshots_by_symbol
         and result.replay_result.account_summary == result.account_summary
     )
     return PaperTradingDaySummary(
@@ -68,9 +76,13 @@ def run_default_paper_trading_day(
     bundle: HistoricalSmokeBundle | None = None,
 ) -> HistoricalPaperReplaySmokeResult:
     resolved_bundle = bundle or build_default_historical_smoke()
-    resolved_journal_path = Path(journal_path) if journal_path is not None else _default_journal_path(
-        artifacts_dir=artifacts_dir,
-        bundle=resolved_bundle,
+    resolved_journal_path = (
+        Path(journal_path)
+        if journal_path is not None
+        else _default_journal_path(
+            artifacts_dir=artifacts_dir,
+            bundle=resolved_bundle,
+        )
     )
     return run_historical_paper_replay_smoke(
         bundle=resolved_bundle,
@@ -113,7 +125,11 @@ def _default_journal_path(
     artifacts_dir: str | Path | None,
     bundle: HistoricalSmokeBundle,
 ) -> Path:
-    base_dir = Path(artifacts_dir) if artifacts_dir is not None else _project_root() / "artifacts"
+    base_dir = (
+        Path(artifacts_dir)
+        if artifacts_dir is not None
+        else _project_root() / "artifacts"
+    )
     timestamp_slug = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     pair_slug = "-".join(bundle.source_pair).lower()
     return base_dir / "historical-smoke" / f"{pair_slug}-{timestamp_slug}.jsonl"

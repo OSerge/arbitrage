@@ -21,7 +21,7 @@ def test_bridge_builds_contracts_from_real_legacy_pair_slice() -> None:
 
     assert result.source_pair == ("SRM5", "SPM5")
     assert result.source_row_count >= 600
-    assert result.source_signal == 1
+    assert result.source_signal == 0
     assert len(result.signal_intents) == 2
     assert len(result.target_positions) == 2
 
@@ -30,14 +30,14 @@ def test_bridge_builds_contracts_from_real_legacy_pair_slice() -> None:
 
     assert first_intent.instrument.symbol == "SRM5"
     assert second_intent.instrument.symbol == "SPM5"
-    assert first_intent.direction.value == "long"
-    assert second_intent.direction.value == "short"
+    assert first_intent.direction.value == "flat"
+    assert second_intent.direction.value == "flat"
     assert first_intent.generated_at == result.as_of
     assert second_intent.generated_at == result.as_of
 
     assert first_target.instrument.symbol == "SRM5"
     assert second_target.instrument.symbol == "SPM5"
-    assert first_target.target_quantity > 0
-    assert second_target.target_quantity < 0
+    assert first_target.target_quantity == 0
+    assert second_target.target_quantity == 0
     assert first_target.research_run_id == result.research_run.run_id
     assert second_target.research_run_id == result.research_run.run_id

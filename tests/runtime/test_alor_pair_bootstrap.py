@@ -5,10 +5,18 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
+from statarb.bridges.historical import synthetic_smoke_catalog
 
-from statarb.adapters.alor.http_market_data import HistoricalBarsRequest, normalize_securities_response
+from statarb.adapters.alor.http_market_data import (
+    HistoricalBarsRequest,
+    normalize_securities_response,
+)
 from statarb.data.alor_fetch import main
-from statarb.data.alor_storage import ingest_history_payload, persist_raw_alor_payload, write_security_snapshot_dataset
+from statarb.data.alor_storage import (
+    ingest_history_payload,
+    persist_raw_alor_payload,
+    write_security_snapshot_dataset,
+)
 from statarb.domain.events import ReplaySessionStatus
 from statarb.runtime.alor_pair_bootstrap import run_alor_pair_bootstrap
 
@@ -16,7 +24,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DATA_DIR = _REPO_ROOT / "data"
 
 
-def test_run_alor_pair_bootstrap_resolves_instrument_group_from_local_snapshots(tmp_path) -> None:
+def test_run_alor_pair_bootstrap_resolves_instrument_group_from_local_snapshots(
+    tmp_path,
+) -> None:
     left_batch, left_request = _ingest_legacy_fixture_as_alor_history(
         tmp_path=tmp_path,
         symbol="SRM5",
@@ -43,10 +53,13 @@ def test_run_alor_pair_bootstrap_resolves_instrument_group_from_local_snapshots(
         left_symbol="SRM5",
         right_symbol="SPM5",
         exchange="MOEX",
-        timeframe="60",
+        timeframe="3600",
         from_time=left_request.from_time,
         to_time=left_request.to_time,
         journal_path=tmp_path / "pair-enriched-smoke.jsonl",
+        instrument_catalog=synthetic_smoke_catalog(),
+        pair_budget="100000",
+        max_hedge_error="0.1",
     )
 
     assert result.left_manifest_path == left_batch.manifest_path
@@ -54,7 +67,10 @@ def test_run_alor_pair_bootstrap_resolves_instrument_group_from_local_snapshots(
     assert result.left_instrument_group == "RFUD"
     assert result.right_instrument_group == "RFUD"
     assert result.smoke_result is not None
-    assert result.smoke_result.replay_result.session.status is ReplaySessionStatus.SUCCEEDED
+    assert (
+        result.smoke_result.replay_result.session.status
+        is ReplaySessionStatus.SUCCEEDED
+    )
 
 
 def test_run_alor_pair_bootstrap_discovers_datasets_and_runs_smoke(tmp_path) -> None:
@@ -74,23 +90,41 @@ def test_run_alor_pair_bootstrap_discovers_datasets_and_runs_smoke(tmp_path) -> 
         left_symbol="SRM5",
         right_symbol="SPM5",
         exchange="MOEX",
-        timeframe="60",
+        timeframe="3600",
         instrument_group=left_request.instrument_group,
         from_time=left_request.from_time,
         to_time=left_request.to_time,
         journal_path=tmp_path / "pair-smoke.jsonl",
+        instrument_catalog=synthetic_smoke_catalog(),
+        pair_budget="100000",
+        max_hedge_error="0.1",
     )
 
     assert result.left_manifest_path == left_batch.manifest_path
     assert result.right_manifest_path == right_batch.manifest_path
-    assert result.bundle.research_run.strategy_id == "alor-normalized-pairs-walk-forward"
+    assert (
+        result.bundle.research_run.strategy_id == "alor-normalized-pairs-walk-forward"
+    )
     assert result.bundle.source_pair == ("SRM5", "SPM5")
     assert result.smoke_result is not None
-    assert result.smoke_result.replay_result.session.status is ReplaySessionStatus.SUCCEEDED
+    assert (
+        result.smoke_result.replay_result.session.status
+        is ReplaySessionStatus.SUCCEEDED
+    )
     assert result.smoke_result.journal_path == tmp_path / "pair-smoke.jsonl"
 
 
 def test_main_pair_bootstrap_command_prints_summary(tmp_path, capsys) -> None:
+    specs_path = tmp_path / "synthetic-specs.json"
+    specs_path.write_text(
+        json.dumps(
+            {
+                "instruments": [
+                    spec.to_dict() for spec in synthetic_smoke_catalog().specs
+                ]
+            }
+        )
+    )
     left_batch, left_request = _ingest_legacy_fixture_as_alor_history(
         tmp_path=tmp_path,
         symbol="SRM5",
@@ -114,7 +148,7 @@ def test_main_pair_bootstrap_command_prints_summary(tmp_path, capsys) -> None:
             "--exchange",
             "MOEX",
             "--timeframe",
-            "60",
+            "3600",
             "--instrument-group",
             left_request.instrument_group or "",
             "--from",
@@ -123,6 +157,12 @@ def test_main_pair_bootstrap_command_prints_summary(tmp_path, capsys) -> None:
             str(left_request.to_time),
             "--journal-path",
             str(tmp_path / "pair-cli-smoke.jsonl"),
+            "--specifications",
+            str(specs_path),
+            "--pair-budget",
+            "100000",
+            "--max-hedge-error",
+            "0.1",
         ]
     )
 
@@ -146,9 +186,9 @@ def _ingest_legacy_fixture_as_alor_history(
         symbol=symbol,
         exchange="MOEX",
         instrument_group="RFUD",
-        tf="60",
+        tf="3600",
         from_time=int(frame.iloc[0]["time"]),
-        to_time=int(frame.iloc[-1]["time"]),
+        to_time=int(frame.iloc[-1]["time"]) + 3600,
         split_adjust=True,
     )
     payload = {
@@ -172,6 +212,35 @@ def _ingest_legacy_fixture_as_alor_history(
         request_id=request_id,
     )
     return batch, request
+
+
+def test_explicit_manifests_are_trimmed_to_the_requested_end(tmp_path):
+    left_batch, left_request = _ingest_legacy_fixture_as_alor_history(
+        tmp_path=tmp_path, symbol="SRM5", request_id="trim-left"
+    )
+    right_batch, _ = _ingest_legacy_fixture_as_alor_history(
+        tmp_path=tmp_path, symbol="SPM5", request_id="trim-right"
+    )
+    cutoff = datetime(2025, 6, 5, tzinfo=UTC)
+    result = run_alor_pair_bootstrap(
+        storage_root=tmp_path,
+        left_symbol="SRM5",
+        right_symbol="SPM5",
+        timeframe="3600",
+        instrument_group="RFUD",
+        from_time=left_request.from_time,
+        to_time=int(cutoff.timestamp()),
+        left_manifest_path=left_batch.manifest_path,
+        right_manifest_path=right_batch.manifest_path,
+        lookback=16,
+        min_estimation_window=64,
+        run_smoke=False,
+        instrument_catalog=synthetic_smoke_catalog(),
+        pair_budget="100000",
+        max_hedge_error="0.5",
+    )
+    assert result.bundle.as_of <= cutoff
+    assert result.bundle.source_row_count < 666
 
 
 def _write_rfud_enrichment_snapshot(

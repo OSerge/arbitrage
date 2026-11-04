@@ -20,6 +20,8 @@
 
 ## Compatibility
 
+- ADR 0005: journal v2 and `price_mark` are accepted additively; `event_counts.price_mark` is an additional count. `total_events` includes marks. Completed paper fills now emit terminal FILLED transitions, so they do not appear in open_order_ids. Existing top-level read-model fields and schema_version `1` are preserved.
+
 - не меняет canonical domain events;
 - не требует HTTP server для MVP operator workflow;
 - breaking changes требуют increment `schema_version` и отдельного approval.

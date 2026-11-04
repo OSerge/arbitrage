@@ -177,7 +177,11 @@ def write_security_snapshot_dataset(
     response_format: AlorObjectFormat | str | None = None,
 ) -> StoredDatasetBatch:
     dataset_request_id = request_id or uuid4().hex
-    exchange = records[0].exchange if records else _optional_text(request_params.get("exchange"))
+    exchange = (
+        records[0].exchange
+        if records
+        else _optional_text(request_params.get("exchange"))
+    )
     layout = recommended_snapshot_storage_layout(
         dataset="instruments",
         observed_at_utc=observed_at_utc,
@@ -206,6 +210,10 @@ def write_security_snapshot_dataset(
             "isin": row.isin,
             "trading_status": row.trading_status,
             "trading_status_info": row.trading_status_info,
+            "tick_value": row.tick_value,
+            "initial_margin_long": row.initial_margin_long,
+            "initial_margin_short": row.initial_margin_short,
+            "last_trade_at": row.last_trade_at,
         }
         for row in records
     ]
@@ -239,7 +247,11 @@ def write_available_boards_dataset(
     data_delay_minutes: int | None = 15,
 ) -> StoredDatasetBatch:
     dataset_request_id = request_id or uuid4().hex
-    exchange = records[0].exchange if records else _optional_text(request_params.get("exchange"))
+    exchange = (
+        records[0].exchange
+        if records
+        else _optional_text(request_params.get("exchange"))
+    )
     layout = recommended_snapshot_storage_layout(
         dataset="available_boards",
         observed_at_utc=observed_at_utc,
@@ -471,7 +483,9 @@ def _write_dataset_batch(
     normalized_uri = _normalized_storage_uri(layout=layout, request_id=request_id)
     normalized_path = storage_root / normalized_uri
     normalized_path.parent.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame.from_records(rows).to_parquet(normalized_path, index=False, engine="pyarrow")
+    pd.DataFrame.from_records(rows).to_parquet(
+        normalized_path, index=False, engine="pyarrow"
+    )
 
     manifest = AlorDatasetManifest(
         dataset_id=f"alor-{dataset_kind}-{request_id}",
@@ -492,7 +506,8 @@ def _write_dataset_batch(
     manifest_uri = _manifest_storage_uri(layout=layout, request_id=request_id)
     manifest_path = storage_root / manifest_uri
     manifest_path.write_text(
-        json.dumps(manifest.to_dict(), ensure_ascii=True, indent=2, sort_keys=True) + "\n",
+        json.dumps(manifest.to_dict(), ensure_ascii=True, indent=2, sort_keys=True)
+        + "\n",
         encoding="utf-8",
     )
     return StoredDatasetBatch(
@@ -515,9 +530,9 @@ def _serialize_payload(payload: Any) -> bytes:
         return payload
     if isinstance(payload, str):
         return payload.encode("utf-8")
-    return json.dumps(payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True).encode(
-        "utf-8"
-    )
+    return json.dumps(
+        payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
 
 
 def _timestamp_to_utc(timestamp: int | float | None) -> datetime:
@@ -534,7 +549,9 @@ def _coerce_format(value: AlorObjectFormat | str | None) -> str:
     return AlorObjectFormat.coerce(value).value
 
 
-def _normalized_storage_uri(*, layout: RecommendedStorageLayout, request_id: str) -> str:
+def _normalized_storage_uri(
+    *, layout: RecommendedStorageLayout, request_id: str
+) -> str:
     return f"{layout.normalized_prefix}/request_id={request_id}/{PARQUET_PART_FILENAME}"
 
 

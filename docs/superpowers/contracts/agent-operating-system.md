@@ -29,6 +29,8 @@
 
 ## Envelope semantics
 
+ADR 0005 clarification (2026-11-04): journal v2 wraps complete event groups in checksummed, newline-terminated transactions. Each event entry retains the canonical envelope fields below alongside payload/lineage. Position/account identifiers supply event_id and captured_at supplies occurred_at. The loader verifies agreement between envelope and payload; legacy v1 entries remain readable.
+
 Canonical execution-event records should be preservable with the following top-level fields:
 
 - `event_id`

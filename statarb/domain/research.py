@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Canonical research contracts."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -37,7 +37,9 @@ class ResearchRunStatus(StrEnum):
                 return member
 
         allowed = ", ".join(member.value for member in cls)
-        raise ValueError(f"Unsupported research run status: {value!r}. Expected one of: {allowed}.")
+        raise ValueError(
+            f"Unsupported research run status: {value!r}. Expected one of: {allowed}."
+        )
 
 
 class SignalDirection(StrEnum):
@@ -56,7 +58,9 @@ class SignalDirection(StrEnum):
                 return member
 
         allowed = ", ".join(member.value for member in cls)
-        raise ValueError(f"Unsupported signal direction: {value!r}. Expected one of: {allowed}.")
+        raise ValueError(
+            f"Unsupported signal direction: {value!r}. Expected one of: {allowed}."
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,10 +77,16 @@ class ResearchRun(SerializableContract):
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "run_id", _require_non_empty(self.run_id, "run_id"))
-        object.__setattr__(self, "strategy_id", _require_non_empty(self.strategy_id, "strategy_id"))
-        object.__setattr__(self, "dataset_id", _require_non_empty(self.dataset_id, "dataset_id"))
+        object.__setattr__(
+            self, "strategy_id", _require_non_empty(self.strategy_id, "strategy_id")
+        )
+        object.__setattr__(
+            self, "dataset_id", _require_non_empty(self.dataset_id, "dataset_id")
+        )
         object.__setattr__(self, "status", ResearchRunStatus.coerce(self.status))
-        object.__setattr__(self, "started_at", _require_aware_datetime(self.started_at, "started_at"))
+        object.__setattr__(
+            self, "started_at", _require_aware_datetime(self.started_at, "started_at")
+        )
 
         if self.completed_at is not None:
             object.__setattr__(
@@ -85,14 +95,15 @@ class ResearchRun(SerializableContract):
                 _require_aware_datetime(self.completed_at, "completed_at"),
             )
             if self.completed_at < self.started_at:
-                raise ValueError("completed_at must be greater than or equal to started_at.")
+                raise ValueError(
+                    "completed_at must be greater than or equal to started_at."
+                )
 
         normalized_parameters = dict(self.parameters)
         object.__setattr__(self, "parameters", MappingProxyType(normalized_parameters))
 
         normalized_artifact_uris = tuple(
-            _require_non_empty(uri, "artifact_uris")
-            for uri in self.artifact_uris
+            _require_non_empty(uri, "artifact_uris") for uri in self.artifact_uris
         )
         object.__setattr__(self, "artifact_uris", normalized_artifact_uris)
 
@@ -112,7 +123,9 @@ class SignalIntent(SerializableContract):
     thesis: str | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "intent_id", _require_non_empty(self.intent_id, "intent_id"))
+        object.__setattr__(
+            self, "intent_id", _require_non_empty(self.intent_id, "intent_id")
+        )
         object.__setattr__(
             self,
             "research_run_id",

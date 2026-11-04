@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -116,7 +116,10 @@ def _matches_history_dataset(
         return False
     if timeframe is not None and str(manifest.request_params.get("tf")) != timeframe:
         return False
-    if instrument_group is not None and manifest.request_params.get("instrument_group") != instrument_group:
+    if (
+        instrument_group is not None
+        and manifest.request_params.get("instrument_group") != instrument_group
+    ):
         return False
     if request_params is not None:
         for key, value in request_params.items():
@@ -128,7 +131,15 @@ def _matches_history_dataset(
             return False
     if to_time is not None:
         max_event_time = _parse_optional_datetime(manifest.max_event_time_utc)
-        if max_event_time is None or max_event_time < _epoch_to_utc_datetime(to_time):
+        timeframe = str(manifest.request_params.get("tf", ""))
+        duration = (
+            int(timeframe)
+            if timeframe.isdigit()
+            else {"D": 86400, "W": 604800}.get(timeframe, 0)
+        )
+        if max_event_time is None or max_event_time + timedelta(
+            seconds=duration
+        ) < _epoch_to_utc_datetime(to_time):
             return False
     return True
 
@@ -154,10 +165,14 @@ def _load_manifest(manifest_path: Path) -> AlorDatasetManifest:
     )
 
 
-def _sort_key(match: DiscoveredAlorHistoryDatasetManifest) -> tuple[datetime, datetime, str]:
+def _sort_key(
+    match: DiscoveredAlorHistoryDatasetManifest,
+) -> tuple[datetime, datetime, str]:
     return (
-        _parse_optional_datetime(match.manifest.created_at_utc) or datetime.fromtimestamp(0, tz=UTC),
-        _parse_optional_datetime(match.manifest.max_event_time_utc) or datetime.fromtimestamp(0, tz=UTC),
+        _parse_optional_datetime(match.manifest.created_at_utc)
+        or datetime.fromtimestamp(0, tz=UTC),
+        _parse_optional_datetime(match.manifest.max_event_time_utc)
+        or datetime.fromtimestamp(0, tz=UTC),
         match.manifest.dataset_id,
     )
 

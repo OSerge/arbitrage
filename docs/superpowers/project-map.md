@@ -6,6 +6,8 @@ This file gives agents a compact map of the repository, the intended MVP boundar
 
 ## Working Context
 
+- Active remediation (2026-11-04): the user approved `ADR 0005` and the causal futures audit plan. Shared research, sizing, costs and account arithmetic now belong to `statarb/`; `core/` public names are compatibility facades. Changes to research/execution semantics in this workstream are explicitly authorized; live enablement remains excluded.
+
 - This repository is operated by one founder with AI agents.
 - The current slice is the narrow `agent-operated` MVP: `paper-first + controlled Alor contour`.
 - `Phase 1` and `Phase 2` are largely complete on the current branch.

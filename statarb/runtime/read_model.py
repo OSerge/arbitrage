@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from statarb.domain.orders import FillEvent, OrderEvent, OrderStatus
-from statarb.domain.positions import AccountSummary, PositionSnapshot
+from statarb.domain.positions import AccountSummary, PositionSnapshot, PriceMark
 from statarb.runtime.replay.loader import decode_event_record, load_event_journal
 
 _TERMINAL_ORDER_STATUSES = {
@@ -22,10 +22,17 @@ class EventTypeCounts:
     fill_event: int = 0
     position_snapshot: int = 0
     account_summary: int = 0
+    price_mark: int = 0
 
     @property
     def total(self) -> int:
-        return self.order_event + self.fill_event + self.position_snapshot + self.account_summary
+        return (
+            self.order_event
+            + self.fill_event
+            + self.position_snapshot
+            + self.account_summary
+            + self.price_mark
+        )
 
     def to_dict(self) -> dict[str, int]:
         return {
@@ -33,6 +40,7 @@ class EventTypeCounts:
             "fill_event": self.fill_event,
             "position_snapshot": self.position_snapshot,
             "account_summary": self.account_summary,
+            "price_mark": self.price_mark,
             "total": self.total,
         }
 
@@ -70,44 +78,23 @@ def build_ops_read_model(journal_path: str | Path) -> OpsReadModel:
 
     for record in records:
         event = decode_event_record(record)
+        contours.add(event.contour.value)
         if isinstance(event, OrderEvent):
-            counts = EventTypeCounts(
-                order_event=counts.order_event + 1,
-                fill_event=counts.fill_event,
-                position_snapshot=counts.position_snapshot,
-                account_summary=counts.account_summary,
-            )
-            contours.add(event.contour.value)
+            counts = replace(counts, order_event=counts.order_event + 1)
             latest_orders[event.order_id] = event
             continue
         if isinstance(event, FillEvent):
-            counts = EventTypeCounts(
-                order_event=counts.order_event,
-                fill_event=counts.fill_event + 1,
-                position_snapshot=counts.position_snapshot,
-                account_summary=counts.account_summary,
-            )
-            contours.add(event.contour.value)
+            counts = replace(counts, fill_event=counts.fill_event + 1)
             continue
         if isinstance(event, PositionSnapshot):
-            counts = EventTypeCounts(
-                order_event=counts.order_event,
-                fill_event=counts.fill_event,
-                position_snapshot=counts.position_snapshot + 1,
-                account_summary=counts.account_summary,
-            )
-            contours.add(event.contour.value)
+            counts = replace(counts, position_snapshot=counts.position_snapshot + 1)
             latest_positions[event.instrument.symbol] = event
             continue
         if isinstance(event, AccountSummary):
-            counts = EventTypeCounts(
-                order_event=counts.order_event,
-                fill_event=counts.fill_event,
-                position_snapshot=counts.position_snapshot,
-                account_summary=counts.account_summary + 1,
-            )
-            contours.add(event.contour.value)
+            counts = replace(counts, account_summary=counts.account_summary + 1)
             latest_account_summary = event
+        if isinstance(event, PriceMark):
+            counts = replace(counts, price_mark=counts.price_mark + 1)
 
     open_order_ids = tuple(
         sorted(
@@ -124,7 +111,9 @@ def build_ops_read_model(journal_path: str | Path) -> OpsReadModel:
         position_symbols=tuple(sorted(latest_positions)),
         open_order_ids=open_order_ids,
         latest_account_summary=(
-            latest_account_summary.to_dict() if latest_account_summary is not None else None
+            latest_account_summary.to_dict()
+            if latest_account_summary is not None
+            else None
         ),
     )
 

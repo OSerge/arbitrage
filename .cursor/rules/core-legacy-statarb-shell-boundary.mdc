@@ -5,6 +5,8 @@ alwaysApply: true
 
 # Core And Statarb Boundary
 
+- Approved exception: `ADR 0005` (2026-11-04) authorizes moving the financial research kernel into `statarb/` and retaining `core/` names as compatibility facades. Do not restore the old close-array accounting or full-sample backtester.
+
 - Treat `core/` as legacy research and prototype code. Preserve behavior, read it for reference, and keep changes there contained.
 - Treat `statarb/` as the home for new platform-shell code: contracts-aligned runtime, adapters, control-plane modules, and future MVP packages.
 - Do not place new `agent-operated` architecture into `core/`.

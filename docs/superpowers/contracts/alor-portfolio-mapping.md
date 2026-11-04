@@ -53,8 +53,10 @@
 
 ### Common
 
+Update 2026-11-04 (ADR 0005): explicit reference identities/aliases in `AlorMappingContext.instruments` take precedence; compact futures codes such as `SRM5` are also recognized by the fallback heuristic. `qty` is a lot count and requires `AlorMappingContext.lot_sizes`; it is never silently treated as `qtyUnits`.
+
 - `contour` для test contour mapping: `broker-test`;
-- quantity fields: предпочитать `qtyUnits` (instrument units), fallback `qty`;
+- quantity fields: предпочитать `qtyUnits` (instrument units); fallback `qty * lot_size` только с явными reference data;
 - timestamps: `updateTime`/`transTime`/`date` в UTC ISO-8601;
 - instrument identity: `InstrumentRef(symbol, exchange, instrument_type)`; default `instrument_type=equity`, futures heuristic по шаблону `-` + maturity suffix.
 

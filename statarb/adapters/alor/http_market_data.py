@@ -131,7 +131,9 @@ class HistoricalBarsRequest:
         endpoints: AlorEndpointCatalog | None = None,
     ) -> HttpRequestShape:
         if self.from_time is None or self.to_time is None:
-            raise ValueError("Historical bars request requires both from_time and to_time.")
+            raise ValueError(
+                "Historical bars request requires both from_time and to_time."
+            )
         params: dict[str, str | int | bool] = {
             "symbol": self.symbol,
             "exchange": self.exchange,
@@ -186,7 +188,9 @@ class QuotesSnapshotRequest:
 
     def __post_init__(self) -> None:
         if not self.symbols:
-            raise ValueError("Quotes snapshot request requires at least one symbol pair.")
+            raise ValueError(
+                "Quotes snapshot request requires at least one symbol pair."
+            )
         if any(":" not in item for item in self.symbols):
             raise ValueError("Quotes symbols must use the EXCHANGE:SYMBOL shape.")
 
@@ -250,6 +254,10 @@ class AlorSecuritySnapshot:
     isin: str | None
     trading_status: int | None
     trading_status_info: str | None
+    tick_value: int | float | None = None
+    initial_margin_long: int | float | None = None
+    initial_margin_short: int | float | None = None
+    last_trade_at: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -331,6 +339,14 @@ def normalize_securities_response(
             isin=_optional_text(item, "ISIN", "isin"),
             trading_status=_optional_int(item, "tradingStatus", "st"),
             trading_status_info=_optional_text(item, "tradingStatusInfo", "sti"),
+            tick_value=_optional_numeric(item, "pricestep", "priceStep", "tickValue"),
+            initial_margin_long=_optional_numeric(
+                item, "marginbuy", "initialMarginLowRiskLong"
+            ),
+            initial_margin_short=_optional_numeric(
+                item, "marginsell", "initialMarginLowRiskShort"
+            ),
+            last_trade_at=_optional_text(item, "cancellation", "lastTradeAt"),
         )
         for item in (_as_mapping(entry, field_name="security entry") for entry in rows)
     )
@@ -347,7 +363,9 @@ def normalize_available_boards_response(
         if isinstance(entry, str):
             board = entry.strip()
             if not board:
-                raise ValueError("Available boards payload cannot contain empty board names.")
+                raise ValueError(
+                    "Available boards payload cannot contain empty board names."
+                )
             normalized_rows.append(
                 AlorAvailableBoardSnapshot(
                     symbol=request.symbol,
@@ -362,7 +380,11 @@ def normalize_available_boards_response(
             continue
 
         item = _as_mapping(entry, field_name="available board entry")
-        board = str(_required_value(item, "board", "boardCode", "board_code", "code", "value", "id"))
+        board = str(
+            _required_value(
+                item, "board", "boardCode", "board_code", "code", "value", "id"
+            )
+        )
         primary_board = _optional_text(item, "primaryBoard", "primary_board")
         is_primary = _optional_bool(item, "isPrimary", "is_primary", "primary")
         if is_primary is None and primary_board is not None:
@@ -400,7 +422,9 @@ def normalize_quotes_response(
             exchange=str(_required_value(item, "exchange", "ex")),
             description=_optional_text(item, "description", "desc"),
             currency=_optional_text(item, "currency"),
-            last_price_timestamp=_optional_int(item, "lastPriceTimestamp", "last_price_timestamp", "tst"),
+            last_price_timestamp=_optional_int(
+                item, "lastPriceTimestamp", "last_price_timestamp", "tst"
+            ),
             open_price=_optional_numeric(item, "openPrice", "open_price", "o"),
             high_price=_optional_numeric(item, "highPrice", "high_price", "h"),
             low_price=_optional_numeric(item, "lowPrice", "low_price", "l"),
@@ -495,7 +519,9 @@ def _optional_text(payload: Mapping[str, Any], *candidates: str) -> str | None:
     return None if value is None else str(value)
 
 
-def _optional_numeric(payload: Mapping[str, Any], *candidates: str) -> int | float | None:
+def _optional_numeric(
+    payload: Mapping[str, Any], *candidates: str
+) -> int | float | None:
     value = _first_present_value(payload, *candidates)
     if value is None:
         return None

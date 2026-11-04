@@ -21,7 +21,7 @@ File-backed ops read-model для локального operator workflow пов�
 ## Compatibility
 
 - не меняет domain event shape;
-- читает только canonical journal records (`order_event`, `fill_event`, `position_snapshot`, `account_summary`);
+- читает canonical events из v1 строк и v2 транзакций (`order_event`, `fill_event`, `price_mark`, `position_snapshot`, `account_summary`);
 - UI/API layers могут строиться поверх `OpsReadModel.to_dict()` без доступа к paper engine.
 
 ## Required approval
@@ -42,7 +42,7 @@ File-backed ops read-model для локального operator workflow пов�
 - optional-fields:
   - `latest_account_summary`
 - invariants:
-  - `total_events == sum(event_counts.values())`;
+  - `total_events` равно сумме счётчиков типов, исключая производное поле `event_counts.total`; добавлен счётчик `price_mark`;
   - `position_symbols` derived from latest `position_snapshot` per instrument symbol;
   - `open_order_ids` содержит order ids, чей последний `order_event.status` не terminal (`filled`, `canceled`, `rejected`);
   - read-model не мутирует journal и не выполняет replay.

@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Minimal pre-trade checks for the paper runtime."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
@@ -15,7 +15,9 @@ class PaperRiskPolicy:
     max_abs_position: Decimal = Decimal("100")
 
     def __post_init__(self) -> None:
-        max_order_quantity = _coerce_decimal(self.max_order_quantity, "max_order_quantity")
+        max_order_quantity = _coerce_decimal(
+            self.max_order_quantity, "max_order_quantity"
+        )
         max_abs_position = _coerce_decimal(self.max_abs_position, "max_abs_position")
         if max_order_quantity <= Decimal("0"):
             raise ValueError("max_order_quantity must be greater than 0.")
@@ -40,6 +42,13 @@ def evaluate_paper_risk_checks(
     order_quantity: Decimal,
     policy: PaperRiskPolicy,
 ) -> tuple[RiskCheckResult, ...]:
+    reducing = (
+        abs(target_position.target_quantity) <= abs(current_quantity)
+        and current_quantity * target_position.target_quantity >= 0
+    )
+    position_ok = (
+        abs(target_position.target_quantity) <= policy.max_abs_position or reducing
+    )
     results = [
         RiskCheckResult(
             name="max_order_quantity",
@@ -55,10 +64,10 @@ def evaluate_paper_risk_checks(
         ),
         RiskCheckResult(
             name="max_abs_position",
-            passed=abs(target_position.target_quantity) <= policy.max_abs_position,
+            passed=position_ok,
             reason=(
                 None
-                if abs(target_position.target_quantity) <= policy.max_abs_position
+                if position_ok
                 else (
                     "max_abs_position exceeded: "
                     f"{abs(target_position.target_quantity)} > {policy.max_abs_position}"
